@@ -302,7 +302,8 @@ class TestActionsSheet:
         inv = _minimal_inventory(repositories=[_minimal_repo(actions=ActionsInfo())])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Actions"]
-        assert ws.max_row == 1  # header only
+        # max_row is 2 because Excel tables require min 2 rows (header + blank)
+        assert ws.max_row <= 2
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +367,7 @@ class TestPackagesSheet:
         inv = _minimal_inventory(packages=[])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Packages"]
-        assert ws.max_row == 1
+        assert ws.max_row <= 2
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +405,7 @@ class TestProjectsSheet:
         inv = _minimal_inventory(projects=[])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Projects"]
-        assert ws.max_row == 1
+        assert ws.max_row <= 2
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +474,7 @@ class TestLargeFilesSheet:
         inv = _minimal_inventory(repositories=[repo])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Large Files"]
-        assert ws.max_row == 1
+        assert ws.max_row <= 2
 
     def test_multiple_large_files_produce_multiple_rows(self, tmp_path: Path) -> None:
         large_files = [
@@ -523,7 +524,7 @@ class TestWarningsSheet:
         inv = _minimal_inventory(metadata=_metadata(scan_warnings=[]))
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Warnings"]
-        assert ws.max_row == 1
+        assert ws.max_row <= 2
 
     def test_multiple_repo_warnings(self, tmp_path: Path) -> None:
         repo = _minimal_repo("repo-w", warnings=["warn1", "warn2"])
@@ -540,41 +541,33 @@ class TestWarningsSheet:
 
 
 class TestSummarySheet:
+    def _all_values(self, ws):
+        """Collect all cell values across columns A-C (3-column summary layout)."""
+        return [
+            ws.cell(row, col).value
+            for row in range(1, ws.max_row + 1)
+            for col in range(1, 4)
+        ]
+
     def test_summary_has_org_name(self, tmp_path: Path) -> None:
         inv = _minimal_inventory(metadata=_metadata(organization="acme-corp"))
         wb = load_workbook(_generate(inv, tmp_path))
-        ws = wb["Summary"]
-        all_values = [
-            ws.cell(row, col).value for row in range(1, ws.max_row + 1) for col in range(1, 3)
-        ]
-        assert "acme-corp" in all_values
+        assert "acme-corp" in self._all_values(wb["Summary"])
 
     def test_summary_has_total_repos(self, tmp_path: Path) -> None:
         inv = _minimal_inventory(summary=InventorySummary(total_repos=42, private_repos=42))
         wb = load_workbook(_generate(inv, tmp_path))
-        ws = wb["Summary"]
-        all_values = [
-            ws.cell(row, col).value for row in range(1, ws.max_row + 1) for col in range(1, 3)
-        ]
-        assert 42 in all_values
+        assert 42 in self._all_values(wb["Summary"])
 
     def test_summary_has_scan_profile(self, tmp_path: Path) -> None:
         inv = _minimal_inventory(metadata=_metadata(scan_profile="full"))
         wb = load_workbook(_generate(inv, tmp_path))
-        ws = wb["Summary"]
-        all_values = [
-            ws.cell(row, col).value for row in range(1, ws.max_row + 1) for col in range(1, 3)
-        ]
-        assert "full" in all_values
+        assert "full" in self._all_values(wb["Summary"])
 
     def test_summary_has_tool_version(self, tmp_path: Path) -> None:
         inv = _minimal_inventory(metadata=_metadata(tool_version="1.2.3"))
         wb = load_workbook(_generate(inv, tmp_path))
-        ws = wb["Summary"]
-        all_values = [
-            ws.cell(row, col).value for row in range(1, ws.max_row + 1) for col in range(1, 3)
-        ]
-        assert "1.2.3" in all_values
+        assert "1.2.3" in self._all_values(wb["Summary"])
 
 
 # ---------------------------------------------------------------------------

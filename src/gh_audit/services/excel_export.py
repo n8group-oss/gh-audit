@@ -1,7 +1,7 @@
-"""ExcelExportService — generates a multi-sheet Excel workbook from an Inventory.
+"""ExcelExportService — generates a polished multi-sheet Excel workbook from an Inventory.
 
-Sheet contract (10 sheets, in order):
-1.  Summary       — org metadata + high-level stats (metric/value pairs)
+Sheet contract (10 core sheets, in order):
+1.  Summary       — branded header, org metadata, high-level stats
 2.  Repositories  — one row per repo with core fields
 3.  Actions       — one row per workflow
 4.  Security      — per-repo security enablement and alert counts
@@ -13,13 +13,13 @@ Sheet contract (10 sheets, in order):
 10. Warnings      — repo name (or "Scan"), warning text
 
 Partial-scan semantics:
-- bool | None fields → "Yes" / "No" / "n/a"
-- int  | None counts → number / "n/a"
+- bool | None fields -> "Yes" / "No" / "n/a"
+- int  | None counts -> number / "n/a"
 
-Formatting applied to all data sheets:
-- Header row: blue fill (#4472C4) + white bold font
-- Freeze header row (freeze_panes = "A2")
-- Column widths auto-sized to max(header_length, 10)
+Formatting:
+- Professional styling matching ado2gh: dark-blue headers, Excel tables,
+  alternating rows, thin borders, auto-fit columns, tab colours, number
+  formatting, and a branded Summary sheet with coloured sections.
 """
 
 from __future__ import annotations
@@ -27,20 +27,74 @@ from __future__ import annotations
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
 from gh_audit import branding
 from gh_audit.models.inventory import Inventory
 
 # ---------------------------------------------------------------------------
-# Style constants
+# Style constants  (matching ado2gh colour palette)
 # ---------------------------------------------------------------------------
 
-_HEADER_FILL = PatternFill(fill_type="solid", fgColor="4472C4")
-_HEADER_FONT = Font(bold=True, color="FFFFFF")
+_HEADER_FILL = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+_HEADER_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+_HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+_METADATA_FILL = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid")
+_METADATA_FONT = Font(name="Calibri", size=11, bold=True, color="1F4E79")
+
+_TOTALS_FILL = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+_TOTALS_FONT = Font(name="Calibri", size=11, bold=True)
+
+_DATA_FONT = Font(name="Calibri", size=10)
+_BOLD_DATA_FONT = Font(name="Calibri", size=10, bold=True)
+_WRAP_ALIGNMENT = Alignment(wrap_text=True, vertical="top")
+
+_THIN_BORDER = Border(
+    left=Side(style="thin", color="D9D9D9"),
+    right=Side(style="thin", color="D9D9D9"),
+    top=Side(style="thin", color="D9D9D9"),
+    bottom=Side(style="thin", color="D9D9D9"),
+)
+
+_ALT_ROW_FILL = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+
 _MIN_COL_WIDTH = 10
+_MAX_COL_WIDTH = 50
+
+_NUMBER_FMT = "#,##0"
+_DECIMAL_FMT = "#,##0.00"
+
+_TAB_COLORS: dict[str, str] = {
+    "Summary": "1F4E79",
+    "Repositories": "2E75B6",
+    "Actions": "2E75B6",
+    "Security": "C00000",
+    "Issues": "BF8F00",
+    "Packages": "548235",
+    "Projects": "548235",
+    "Users": "7F7F7F",
+    "Large Files": "7F7F7F",
+    "Warnings": "C00000",
+    "Teams": "2E75B6",
+    "Org Policies": "2E75B6",
+    "Org Rulesets": "2E75B6",
+    "Runners": "BF8F00",
+    "Environments": "BF8F00",
+    "Installed Apps": "BF8F00",
+    "Dependabot Alerts": "C00000",
+    "Code Scanning Alerts": "C00000",
+    "Secret Scanning Alerts": "C00000",
+    "Copilot": "548235",
+    "Traffic": "548235",
+    "Community Health": "548235",
+    "Actions Runs": "BF8F00",
+    "Enterprise": "1F4E79",
+    "Enterprise Teams": "1F4E79",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -63,14 +117,15 @@ def _int_na(value: int | None) -> int | str:
 
 
 def _style_header_row(ws: Worksheet, headers: list[str]) -> None:
-    """Write the header row with blue fill, white bold font, and auto column widths."""
+    """Write the header row with dark-blue fill, white bold font, and freeze pane."""
     for col_idx, header in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=col_idx, value=header)
         cell.fill = _HEADER_FILL
         cell.font = _HEADER_FONT
-        cell.alignment = Alignment(horizontal="center")
+        cell.alignment = _HEADER_ALIGNMENT
+        cell.border = _THIN_BORDER
 
-    # Auto-width: use header length as minimum width
+    # Auto-width from header lengths (refined later by _auto_fit_columns)
     for col_idx, header in enumerate(headers, start=1):
         col_letter = get_column_letter(col_idx)
         ws.column_dimensions[col_letter].width = max(len(header) + 2, _MIN_COL_WIDTH)
@@ -85,70 +140,72 @@ def _style_header_row(ws: Worksheet, headers: list[str]) -> None:
 
 
 def _build_summary(ws: Worksheet, inventory: Inventory) -> None:
-    """Summary sheet: metric/value pairs, no frozen header (metadata, not data)."""
+    """Summary sheet: branded header, metadata section, totals section, branding."""
     meta = inventory.metadata
     summary = inventory.summary
 
-    rows = [
-        ("Organization", meta.organization),
-        ("Tool Version", meta.tool_version),
-        ("Schema Version", meta.schema_version),
-        ("Generated At", str(meta.generated_at)),
-        ("Auth Method", meta.auth_method),
-        ("Scan Profile", meta.scan_profile),
-        ("API URL", meta.api_url),
-        # --- repo counts ---
-        ("Total Repositories", summary.total_repos),
-        ("Public Repositories", summary.public_repos),
-        ("Private Repositories", summary.private_repos),
-        ("Internal Repositories", summary.internal_repos),
-        ("Archived Repositories", summary.archived_repos),
-        ("Forked Repositories", summary.forked_repos),
-        ("Template Repositories", summary.template_repos),
-        # --- activity ---
-        ("Total Size (bytes)", summary.total_size_bytes),
-        ("Total Branches", summary.total_branches),
-        ("Total PRs", summary.total_prs),
-        ("Total Issues", summary.total_issues),
-        # --- large files / LFS ---
-        ("Repos with Large Files", summary.repos_with_large_files),
-        ("Repos with LFS", summary.repos_with_lfs),
-        # --- actions ---
-        ("Repos with Workflows", summary.repos_with_workflows),
-        ("Total Workflows", summary.total_workflow_count),
-        ("Repos with Self-Hosted Runners", summary.repos_with_self_hosted_runners),
-        # --- security ---
-        ("Repos with Dependabot", summary.repos_with_dependabot),
-        ("Repos with Code Scanning", summary.repos_with_code_scanning),
-        ("Repos with Secret Scanning", summary.repos_with_secret_scanning),
-        # --- packages / projects ---
-        ("Total Packages", summary.total_packages),
-        ("Total Projects", summary.total_projects),
+    # --- Branding block (rows 1-3) ---
+    ws.append(["gh-audit Discovery Report"])
+    ws.append([branding.TAGLINE])
+    ws.append(["github.com/n8group-oss/gh-audit"])
+
+    # Blank separator (row 4)
+    ws.append([None])
+
+    # Header row (row 5)
+    ws.append(["Section", "Key", "Value"])
+
+    # --- Metadata section ---
+    metadata_rows = [
+        ("Metadata", "Organization", meta.organization),
+        ("Metadata", "Tool Version", meta.tool_version),
+        ("Metadata", "Schema Version", meta.schema_version),
+        ("Metadata", "Generated At", str(meta.generated_at)),
+        ("Metadata", "Auth Method", meta.auth_method),
+        ("Metadata", "Scan Profile", meta.scan_profile),
+        ("Metadata", "API URL", meta.api_url),
     ]
+    for row in metadata_rows:
+        ws.append(list(row))
 
-    ws["A1"] = "Metric"
-    ws["B1"] = "Value"
-    ws["A1"].font = Font(bold=True)
-    ws["B1"].font = Font(bold=True)
+    # --- Totals section ---
+    totals_rows = [
+        ("Totals", "Total Repositories", summary.total_repos),
+        ("Totals", "Public Repositories", summary.public_repos),
+        ("Totals", "Private Repositories", summary.private_repos),
+        ("Totals", "Internal Repositories", summary.internal_repos),
+        ("Totals", "Archived Repositories", summary.archived_repos),
+        ("Totals", "Forked Repositories", summary.forked_repos),
+        ("Totals", "Template Repositories", summary.template_repos),
+        ("Totals", "Total Size (bytes)", summary.total_size_bytes),
+        ("Totals", "Total Branches", summary.total_branches),
+        ("Totals", "Total PRs", summary.total_prs),
+        ("Totals", "Total Issues", summary.total_issues),
+        ("Totals", "Repos with Large Files", summary.repos_with_large_files),
+        ("Totals", "Repos with LFS", summary.repos_with_lfs),
+        ("Totals", "Repos with Workflows", summary.repos_with_workflows),
+        ("Totals", "Total Workflows", summary.total_workflow_count),
+        ("Totals", "Repos with Self-Hosted Runners", summary.repos_with_self_hosted_runners),
+        ("Totals", "Repos with Dependabot", summary.repos_with_dependabot),
+        ("Totals", "Repos with Code Scanning", summary.repos_with_code_scanning),
+        ("Totals", "Repos with Secret Scanning", summary.repos_with_secret_scanning),
+        ("Totals", "Total Packages", summary.total_packages),
+        ("Totals", "Total Projects", summary.total_projects),
+    ]
+    for row in totals_rows:
+        ws.append(list(row))
 
-    for row_idx, (metric, value) in enumerate(rows, start=2):
-        ws.cell(row=row_idx, column=1, value=metric)
-        ws.cell(row=row_idx, column=2, value=value)
-
-    # Blank separator row then N8 Group branding
-    branding_start = len(rows) + 3  # +2 for header row, +1 for blank separator
+    # Blank separator then N8 Group branding
+    ws.append([None])
     branding_rows = [
-        ("About", f"gh-audit is a free tool by {branding.COMPANY_NAME}"),
-        ("Website", branding.WEBSITE),
-        ("Contact", branding.SALES_EMAIL),
-        ("Services", ", ".join(branding.SERVICES)),
+        ("About", branding.COMPANY_NAME, f"gh-audit is a free tool by {branding.COMPANY_NAME}"),
+        ("About", "Website", branding.WEBSITE),
+        ("About", "Contact", branding.SALES_EMAIL),
+        ("About", "Phone", branding.PHONE),
+        ("About", "Services", ", ".join(branding.SERVICES)),
     ]
-    for offset, (label, value) in enumerate(branding_rows):
-        ws.cell(row=branding_start + offset, column=1, value=label)
-        ws.cell(row=branding_start + offset, column=2, value=value)
-
-    ws.column_dimensions["A"].width = 36
-    ws.column_dimensions["B"].width = 30
+    for row in branding_rows:
+        ws.append(list(row))
 
 
 def _build_repositories(ws: Worksheet, inventory: Inventory) -> None:
@@ -299,6 +356,186 @@ def _build_warnings(ws: Worksheet, inventory: Inventory) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Formatting helpers  (applied after all data is written)
+# ---------------------------------------------------------------------------
+
+
+def _add_table(sheet: Worksheet, name: str) -> None:
+    """Add an Excel table over all data in the sheet (header + data rows)."""
+    max_row = sheet.max_row
+    max_col = sheet.max_column
+    if max_row < 1 or max_col < 1:
+        return
+    # Tables require at least 2 rows (header + 1 data)
+    if max_row == 1:
+        sheet.append([None] * max_col)
+        max_row = 2
+    ref = f"A1:{get_column_letter(max_col)}{max_row}"
+    table = Table(displayName=name, ref=ref)
+    table.tableStyleInfo = TableStyleInfo(
+        name="TableStyleMedium2",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False,
+    )
+    sheet.add_table(table)
+
+
+def _auto_fit_columns(
+    sheet: Worksheet, min_width: int = _MIN_COL_WIDTH, max_width: int = _MAX_COL_WIDTH
+) -> None:
+    """Set each column width to fit the longest cell value."""
+    for col_cells in sheet.columns:
+        max_len = 0
+        col_letter = get_column_letter(col_cells[0].column)
+        for cell in col_cells:
+            if cell.value is not None:
+                cell_len = max(len(str(line)) for line in str(cell.value).split("\n"))
+                max_len = max(max_len, cell_len)
+        adjusted = min(max(max_len + 2, min_width), max_width)
+        sheet.column_dimensions[col_letter].width = adjusted
+
+
+def _style_data_cells(sheet: Worksheet, start_row: int = 2) -> None:
+    """Apply font, border, and wrap alignment to all data cells."""
+    for row in sheet.iter_rows(
+        min_row=start_row, max_row=sheet.max_row, max_col=sheet.max_column
+    ):
+        for cell in row:
+            cell.font = _DATA_FONT
+            cell.border = _THIN_BORDER
+            cell.alignment = _WRAP_ALIGNMENT
+
+
+def _bold_first_column(sheet: Worksheet) -> None:
+    """Bold the first column (entity names) in data rows."""
+    for row in sheet.iter_rows(min_row=2):
+        if row[0].value is not None:
+            row[0].font = _BOLD_DATA_FONT
+
+
+def _apply_alternating_rows(sheet: Worksheet, start_row: int = 3) -> None:
+    """Apply subtle alternating row shading to data rows."""
+    for row_idx in range(start_row, sheet.max_row + 1, 2):
+        for cell in sheet[row_idx]:
+            if cell.fill == PatternFill():  # only if not already coloured
+                cell.fill = _ALT_ROW_FILL
+
+
+def _apply_number_formatting(sheet: Worksheet) -> None:
+    """Apply thousands separator to integer cells and 2-decimal to floats."""
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, max_col=sheet.max_column):
+        for cell in row:
+            if isinstance(cell.value, int):
+                cell.number_format = _NUMBER_FMT
+            elif isinstance(cell.value, float):
+                cell.number_format = _DECIMAL_FMT
+
+
+def _re_style_header_row(sheet: Worksheet) -> None:
+    """Re-apply header styling after table creation (tables can override styles)."""
+    for cell in sheet[1]:
+        cell.font = _HEADER_FONT
+        cell.fill = _HEADER_FILL
+        cell.alignment = _HEADER_ALIGNMENT
+        cell.border = _THIN_BORDER
+
+
+def _style_summary_sheet(ws: Worksheet) -> None:
+    """Apply visual sections to the Summary sheet."""
+    # --- Branding rows (1-3) ---
+    ws.merge_cells("A1:C1")
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="1F4E79")
+    ws["A1"].alignment = Alignment(horizontal="left")
+
+    ws.merge_cells("A2:C2")
+    ws["A2"].font = Font(name="Calibri", size=11, italic=True, color="808080")
+
+    ws.merge_cells("A3:C3")
+    ws["A3"].hyperlink = "https://github.com/n8group-oss/gh-audit"
+    ws["A3"].font = Font(name="Calibri", size=10, color="2E75B6", underline="single")
+    ws["A3"].value = "github.com/n8group-oss/gh-audit"
+
+    # --- Row 5: header row ---
+    for cell in ws[5]:
+        if cell.value is not None:
+            cell.font = _HEADER_FONT
+            cell.fill = _HEADER_FILL
+            cell.alignment = _HEADER_ALIGNMENT
+            cell.border = _THIN_BORDER
+
+    # --- Data rows: section-based colouring ---
+    for row in ws.iter_rows(min_row=6, max_row=ws.max_row, max_col=ws.max_column):
+        section = row[0].value
+        for cell in row:
+            cell.border = _THIN_BORDER
+
+        if section == "Metadata":
+            for cell in row:
+                cell.fill = _METADATA_FILL
+                cell.font = _METADATA_FONT
+        elif section == "Totals":
+            for cell in row:
+                cell.fill = _TOTALS_FILL
+                cell.font = _TOTALS_FONT
+            # Right-align the value column (C) for totals
+            if len(row) >= 3 and row[2].value is not None:
+                row[2].alignment = Alignment(horizontal="right", vertical="center")
+                if isinstance(row[2].value, (int, float)):
+                    row[2].number_format = _NUMBER_FMT
+        elif section == "About":
+            for cell in row:
+                cell.font = Font(name="Calibri", size=10, color="808080")
+
+    # Freeze below branding + header
+    ws.freeze_panes = "A6"
+
+    # Auto-fit columns
+    _auto_fit_columns(ws)
+
+
+def _apply_formatting(wb: Workbook) -> None:
+    """Apply comprehensive formatting: tables, styles, colours to the entire workbook."""
+    # --- Summary sheet ---
+    if "Summary" in wb.sheetnames:
+        _style_summary_sheet(wb["Summary"])
+
+    # --- Data sheets ---
+    for sheet_name in wb.sheetnames:
+        if sheet_name == "Summary":
+            continue
+        sheet = wb[sheet_name]
+
+        # Add Excel table (gives row stripes and filter dropdowns)
+        safe_name = sheet_name.replace(" ", "")
+        _add_table(sheet, safe_name)
+
+        # Re-apply header style after table creation
+        _re_style_header_row(sheet)
+
+        # Style data cells (font, border, wrap)
+        _style_data_cells(sheet)
+
+        # Alternating row shading
+        _apply_alternating_rows(sheet)
+
+        # Bold first column (entity names)
+        _bold_first_column(sheet)
+
+        # Number formatting
+        _apply_number_formatting(sheet)
+
+        # Auto-fit columns
+        _auto_fit_columns(sheet)
+
+    # --- Tab colours ---
+    for sheet_name, color in _TAB_COLORS.items():
+        if sheet_name in wb.sheetnames:
+            wb[sheet_name].sheet_properties.tabColor = color
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -364,7 +601,10 @@ class ExcelExportService:
                 ("2FA required", _bool_na(pol.two_factor_requirement_enabled)),
                 ("Web commit sign-off", _bool_na(pol.web_commit_signoff_required)),
                 ("Members can create repos", _bool_na(pol.members_can_create_repositories)),
-                ("Members can fork private", _bool_na(pol.members_can_fork_private_repositories)),
+                (
+                    "Members can fork private",
+                    _bool_na(pol.members_can_fork_private_repositories),
+                ),
                 ("Members can delete repos", _bool_na(pol.members_can_delete_repositories)),
                 (
                     "Members can change visibility",
@@ -428,7 +668,9 @@ class ExcelExportService:
                         ws.cell(
                             row=env_row,
                             column=5,
-                            value=prot.branch_policy if prot and prot.branch_policy else "none",
+                            value=prot.branch_policy
+                            if prot and prot.branch_policy
+                            else "none",
                         )
                         ws.cell(
                             row=env_row,
@@ -479,7 +721,14 @@ class ExcelExportService:
 
             # Code Scanning Alerts sheet
             ws = wb.create_sheet("Code Scanning Alerts")
-            cs_headers = ["Repository", "Rule", "Severity", "Security Severity", "Tool", "State"]
+            cs_headers = [
+                "Repository",
+                "Rule",
+                "Severity",
+                "Security Severity",
+                "Tool",
+                "State",
+            ]
             _style_header_row(ws, cs_headers)
             cs_row = 2
             for repo in inventory.repositories:
@@ -676,5 +925,8 @@ class ExcelExportService:
                     ws.cell(row=idx, column=2, value=team.slug)
                     ws.cell(row=idx, column=3, value=team.member_count)
                     ws.cell(row=idx, column=4, value=team.org_count)
+
+        # Apply comprehensive formatting to all sheets
+        _apply_formatting(wb)
 
         wb.save(str(output_path))

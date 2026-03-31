@@ -133,16 +133,16 @@ def init() -> None:
         private_key_path = typer.prompt("Path to private key PEM file")
         organization = typer.prompt("Organization")
 
-        lines.append(f"GH_SCANNER_APP_ID={app_id}")
-        lines.append(f"GH_SCANNER_INSTALLATION_ID={installation_id}")
-        lines.append(f"GH_SCANNER_PRIVATE_KEY_PATH={private_key_path}")
-        lines.append(f"GH_SCANNER_ORGANIZATION={organization}")
+        lines.append(f"GH_AUDIT_APP_ID={app_id}")
+        lines.append(f"GH_AUDIT_INSTALLATION_ID={installation_id}")
+        lines.append(f"GH_AUDIT_PRIVATE_KEY_PATH={private_key_path}")
+        lines.append(f"GH_AUDIT_ORGANIZATION={organization}")
     else:
         token = typer.prompt("Personal Access Token", hide_input=True)
         organization = typer.prompt("Organization")
 
-        lines.append(f"GH_SCANNER_TOKEN={token}")
-        lines.append(f"GH_SCANNER_ORGANIZATION={organization}")
+        lines.append(f"GH_AUDIT_TOKEN={token}")
+        lines.append(f"GH_AUDIT_ORGANIZATION={organization}")
 
     # Verify credentials before writing .env
     if choice == "2":

@@ -59,7 +59,7 @@ def _yaml_with_env_var() -> str:
     return """\
 organizations:
   - name: my-org
-    token: "${GH_SCANNER_TEST_TOKEN}"
+    token: "${GH_AUDIT_TEST_TOKEN}"
 """
 
 
@@ -150,17 +150,17 @@ class TestLoadConfig:
         assert len(config.organizations) == 2
 
     def test_expands_env_var_in_token(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("GH_SCANNER_TEST_TOKEN", "ghp_from_env")
+        monkeypatch.setenv("GH_AUDIT_TEST_TOKEN", "ghp_from_env")
         path = _write_yaml(tmp_path / "config.yml", _yaml_with_env_var())
         config = load_config(path)
 
         assert config.organizations[0].token == "ghp_from_env"
 
     def test_raises_config_error_for_missing_env_var(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("GH_SCANNER_TEST_TOKEN", raising=False)
+        monkeypatch.delenv("GH_AUDIT_TEST_TOKEN", raising=False)
         path = _write_yaml(tmp_path / "config.yml", _yaml_with_env_var())
 
-        with pytest.raises(ConfigError, match="GH_SCANNER_TEST_TOKEN"):
+        with pytest.raises(ConfigError, match="GH_AUDIT_TEST_TOKEN"):
             load_config(path)
 
     def test_raises_config_error_for_missing_file(self, tmp_path):

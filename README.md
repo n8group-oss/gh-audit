@@ -8,8 +8,6 @@ projects -- and generates JSON, HTML, and Excel reports. It supports standard
 (fast) and deep (thorough) scan profiles, multi-organization scanning via YAML
 config, and both PAT and GitHub App authentication.
 
-Formerly `gh-scanner`.
-
 A free tool by [N8 Group](https://n8-group.com) -- DevOps Transformation.
 Executed with Precision.
 
@@ -124,8 +122,8 @@ Required scopes (classic): `repo`, `read:org`, `read:packages`, `read:project`, 
 Set via CLI flag, environment variable, or `.env` file:
 
 ```bash
-export GH_SCANNER_TOKEN=ghp_xxxxx
-export GH_SCANNER_ORGANIZATION=myorg
+export GH_AUDIT_TOKEN=ghp_xxxxx
+export GH_AUDIT_ORGANIZATION=myorg
 ```
 
 ### GitHub App (recommended)
@@ -136,16 +134,16 @@ Required permissions: Repository metadata (read), Organization members (read),
 Actions (read), Packages (read), Security events (read).
 
 ```bash
-export GH_SCANNER_APP_ID=12345
-export GH_SCANNER_PRIVATE_KEY_PATH=/path/to/key.pem
-export GH_SCANNER_INSTALLATION_ID=67890
-export GH_SCANNER_ORGANIZATION=myorg
+export GH_AUDIT_APP_ID=12345
+export GH_AUDIT_PRIVATE_KEY_PATH=/path/to/key.pem
+export GH_AUDIT_INSTALLATION_ID=67890
+export GH_AUDIT_ORGANIZATION=myorg
 ```
 
 ### GitHub Enterprise Server
 
 ```bash
-export GH_SCANNER_API_URL=https://github.mycompany.com/api/v3
+export GH_AUDIT_API_URL=https://github.mycompany.com/api/v3
 ```
 
 ## Multi-Organization Config

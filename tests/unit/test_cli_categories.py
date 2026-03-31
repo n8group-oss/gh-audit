@@ -55,14 +55,14 @@ def test_org_entry_enterprise_slug_default_is_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# resolve_settings — GH_SCANNER_CATEGORIES env var
+# resolve_settings — GH_AUDIT_CATEGORIES env var
 # ---------------------------------------------------------------------------
 
 
 def test_resolve_settings_categories_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_CATEGORIES", "governance,security")
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.setenv("GH_AUDIT_CATEGORIES", "governance,security")
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     # Use a non-existent .env so file doesn't interfere
     settings = resolve_settings(env_path="/nonexistent/.env")
     assert "governance" in settings.categories
@@ -70,18 +70,18 @@ def test_resolve_settings_categories_from_env(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_resolve_settings_categories_strips_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_CATEGORIES", " governance , security ")
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.setenv("GH_AUDIT_CATEGORIES", " governance , security ")
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     settings = resolve_settings(env_path="/nonexistent/.env")
     assert "governance" in settings.categories
     assert "security" in settings.categories
 
 
 def test_resolve_settings_categories_cli_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_CATEGORIES", "security")
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.setenv("GH_AUDIT_CATEGORIES", "security")
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     settings = resolve_settings(
         categories=["governance"],
         env_path="/nonexistent/.env",
@@ -92,22 +92,22 @@ def test_resolve_settings_categories_cli_overrides_env(monkeypatch: pytest.Monke
 
 
 def test_resolve_settings_categories_empty_when_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_CATEGORIES", raising=False)
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.delenv("GH_AUDIT_CATEGORIES", raising=False)
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     settings = resolve_settings(env_path="/nonexistent/.env")
     assert settings.categories == []
 
 
 # ---------------------------------------------------------------------------
-# resolve_settings — GH_SCANNER_ENTERPRISE_SLUG env var
+# resolve_settings — GH_AUDIT_ENTERPRISE_SLUG env var
 # ---------------------------------------------------------------------------
 
 
 def test_resolve_settings_enterprise_slug_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_ENTERPRISE_SLUG", "my-ent")
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.setenv("GH_AUDIT_ENTERPRISE_SLUG", "my-ent")
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     settings = resolve_settings(env_path="/nonexistent/.env")
     assert settings.enterprise_slug == "my-ent"
 
@@ -115,9 +115,9 @@ def test_resolve_settings_enterprise_slug_from_env(monkeypatch: pytest.MonkeyPat
 def test_resolve_settings_enterprise_slug_cli_overrides_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GH_SCANNER_ENTERPRISE_SLUG", "env-ent")
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.setenv("GH_AUDIT_ENTERPRISE_SLUG", "env-ent")
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     settings = resolve_settings(
         enterprise_slug="cli-ent",
         env_path="/nonexistent/.env",
@@ -128,8 +128,8 @@ def test_resolve_settings_enterprise_slug_cli_overrides_env(
 def test_resolve_settings_enterprise_slug_none_when_not_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("GH_SCANNER_ENTERPRISE_SLUG", raising=False)
-    monkeypatch.setenv("GH_SCANNER_TOKEN", "ghp_test")
-    monkeypatch.setenv("GH_SCANNER_ORGANIZATION", "myorg")
+    monkeypatch.delenv("GH_AUDIT_ENTERPRISE_SLUG", raising=False)
+    monkeypatch.setenv("GH_AUDIT_TOKEN", "ghp_test")
+    monkeypatch.setenv("GH_AUDIT_ORGANIZATION", "myorg")
     settings = resolve_settings(env_path="/nonexistent/.env")
     assert settings.enterprise_slug is None

@@ -3,7 +3,7 @@
 Merges configuration from three sources in priority order:
 
     1. Explicit CLI keyword arguments (highest priority)
-    2. Environment variables (``GH_SCANNER_*``)
+    2. Environment variables (``GH_AUDIT_*``)
     3. A ``.env`` file (lowest priority)
 
 The ``resolve_settings()`` function is the single entry point used by CLI
@@ -35,15 +35,15 @@ from gh_audit.models.config import ScannerConfig
 # Environment variable names
 # ---------------------------------------------------------------------------
 
-_ENV_TOKEN = "GH_SCANNER_TOKEN"
-_ENV_ORGANIZATION = "GH_SCANNER_ORGANIZATION"
-_ENV_API_URL = "GH_SCANNER_API_URL"
-_ENV_APP_ID = "GH_SCANNER_APP_ID"
-_ENV_PRIVATE_KEY_PATH = "GH_SCANNER_PRIVATE_KEY_PATH"
-_ENV_INSTALLATION_ID = "GH_SCANNER_INSTALLATION_ID"
-_ENV_TELEMETRY_DISABLED = "GH_SCANNER_TELEMETRY_DISABLED"
-_ENV_CATEGORIES = "GH_SCANNER_CATEGORIES"
-_ENV_ENTERPRISE_SLUG = "GH_SCANNER_ENTERPRISE_SLUG"
+_ENV_TOKEN = "GH_AUDIT_TOKEN"
+_ENV_ORGANIZATION = "GH_AUDIT_ORGANIZATION"
+_ENV_API_URL = "GH_AUDIT_API_URL"
+_ENV_APP_ID = "GH_AUDIT_APP_ID"
+_ENV_PRIVATE_KEY_PATH = "GH_AUDIT_PRIVATE_KEY_PATH"
+_ENV_INSTALLATION_ID = "GH_AUDIT_INSTALLATION_ID"
+_ENV_TELEMETRY_DISABLED = "GH_AUDIT_TELEMETRY_DISABLED"
+_ENV_CATEGORIES = "GH_AUDIT_CATEGORIES"
+_ENV_ENTERPRISE_SLUG = "GH_AUDIT_ENTERPRISE_SLUG"
 
 # Smart / curly quote characters to strip from .env values
 _SMART_QUOTES = "\u201c\u201d\u2018\u2019"
@@ -241,7 +241,7 @@ def resolve_settings(
     # --- Step 4: validate organization is present ---
     if not resolved_org:
         raise ConfigError(
-            "Organization is required.  Pass --organization / set GH_SCANNER_ORGANIZATION."
+            "Organization is required.  Pass --organization / set GH_AUDIT_ORGANIZATION."
         )
 
     # --- Step 5: assemble kwargs for ScannerConfig ---

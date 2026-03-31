@@ -28,37 +28,37 @@ def _expected_distinct_id(org: str) -> str:
 
 
 def test_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg")
     assert t._enabled is True
 
 
 def test_disabled_via_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=False)
     assert t._enabled is False
 
 
 def test_disabled_via_env_var_1(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_TELEMETRY_DISABLED", "1")
+    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "1")
     t = Telemetry(organization="myorg", enabled=True)
     assert t._enabled is False
 
 
 def test_disabled_via_env_var_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_TELEMETRY_DISABLED", "true")
+    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "true")
     t = Telemetry(organization="myorg", enabled=True)
     assert t._enabled is False
 
 
 def test_disabled_via_env_var_yes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_TELEMETRY_DISABLED", "yes")
+    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "yes")
     t = Telemetry(organization="myorg", enabled=True)
     assert t._enabled is False
 
 
 def test_env_var_0_does_not_disable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_SCANNER_TELEMETRY_DISABLED", "0")
+    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "0")
     t = Telemetry(organization="myorg", enabled=True)
     assert t._enabled is True
 
@@ -69,28 +69,28 @@ def test_env_var_0_does_not_disable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_distinct_id_is_64_char_hex(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg")
     assert len(t._distinct_id) == 64
     assert all(c in "0123456789abcdef" for c in t._distinct_id)
 
 
 def test_same_org_same_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t1 = Telemetry(organization="acme")
     t2 = Telemetry(organization="acme")
     assert t1._distinct_id == t2._distinct_id
 
 
 def test_different_org_different_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t1 = Telemetry(organization="orgA")
     t2 = Telemetry(organization="orgB")
     assert t1._distinct_id != t2._distinct_id
 
 
 def test_distinct_id_matches_expected_hash(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     org = "myorg"
     t = Telemetry(organization=org)
     assert t._distinct_id == _expected_distinct_id(org)
@@ -102,7 +102,7 @@ def test_distinct_id_matches_expected_hash(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_all_track_methods_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=False)
     mock_client = MagicMock()
     t._client = mock_client
@@ -127,7 +127,7 @@ def test_all_track_methods_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_track_scanner_launched_captures_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -151,7 +151,7 @@ def test_track_scanner_launched_captures_event(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_track_discovery_completed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -169,7 +169,7 @@ def test_track_discovery_completed_sends_event(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_track_discovery_started_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -180,7 +180,7 @@ def test_track_discovery_started_sends_event(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_track_discovery_failed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -191,7 +191,7 @@ def test_track_discovery_failed_sends_event(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_track_report_started_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -202,7 +202,7 @@ def test_track_report_started_sends_event(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_track_report_completed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -213,7 +213,7 @@ def test_track_report_completed_sends_event(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_track_report_failed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -224,7 +224,7 @@ def test_track_report_failed_sends_event(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_capture_exception_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -240,7 +240,7 @@ def test_capture_exception_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_never_raises_with_none_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     t._client = None  # simulate broken/missing client
 
@@ -257,7 +257,7 @@ def test_never_raises_with_none_client(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_never_raises_with_broken_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
 
     broken_client = MagicMock()
@@ -277,14 +277,14 @@ def test_never_raises_with_broken_client(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_shutdown_safe_with_none_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     t._client = None
     t.shutdown()  # must not raise
 
 
 def test_shutdown_calls_client_shutdown_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     t = Telemetry(organization="myorg", enabled=True)
     mock_client = MagicMock()
     t._client = mock_client
@@ -301,7 +301,7 @@ def test_shutdown_calls_client_shutdown_when_enabled(monkeypatch: pytest.MonkeyP
 
 def test_graceful_when_posthog_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     """Telemetry should silently become a no-op if PostHog is not installed."""
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
 
     # Patch the module-level Posthog name to None (simulating ImportError path)
     import gh_audit.services.telemetry as telemetry_mod
@@ -326,7 +326,7 @@ def test_graceful_when_posthog_unavailable(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_task_description_example(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_SCANNER_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
     telemetry = Telemetry(organization="myorg", enabled=True)
     # This must not raise regardless of PostHog availability
     telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")

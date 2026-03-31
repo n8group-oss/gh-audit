@@ -2,7 +2,7 @@
 
 Design constraints
 ------------------
-- Disabled by ``GH_SCANNER_TELEMETRY_DISABLED=1`` env var or ``enabled=False``.
+- Disabled by ``GH_AUDIT_TELEMETRY_DISABLED=1`` env var or ``enabled=False``.
 - Hashed distinct ID: ``SHA-256(org_name + "|" + hostname)`` — no raw PII.
 - PostHog client created with ``sync_mode=False`` (fire-and-forget).
 - 2-second connection timeout; no retries.
@@ -39,7 +39,7 @@ def _compute_distinct_id(organization: str) -> str:
 
 
 def _is_env_disabled() -> bool:
-    value = os.environ.get("GH_SCANNER_TELEMETRY_DISABLED", "").lower()
+    value = os.environ.get("GH_AUDIT_TELEMETRY_DISABLED", "").lower()
     return value in _DISABLED_VALUES
 
 

@@ -1,0 +1,31 @@
+# gh-audit multi-organization config file
+# See: https://github.com/n8group-oss/gh-audit
+
+# Global defaults applied to all organizations unless overridden per-org.
+defaults:
+  scan_profile: standard        # "standard" or "deep"
+  concurrency: 8                # concurrent API calls per org
+  include_archived: true        # include archived repositories
+
+# Organizations to scan. Each must have authentication credentials.
+organizations:
+
+  # --- PAT authentication ---
+  - name: my-github-org
+    token: ${GH_SCANNER_TOKEN}  # env var reference (avoids secrets in file)
+
+  # --- GitHub App authentication (recommended for better rate limits) ---
+  - name: enterprise-org
+    app_id: 12345
+    private_key_path: ${GH_SCANNER_KEY_PATH}
+    installation_id: 67890
+    scan_profile: deep          # override: deep scan for this org
+
+  # --- GitHub Enterprise Server ---
+  - name: ghes-org
+    token: ${GH_SCANNER_GHES_TOKEN}
+    api_url: https://github.mycompany.com/api/v3
+    include_archived: false     # override: skip archived repos
+
+# Usage:
+#   gh-audit discover --config gh-audit.yml --output-dir ./results

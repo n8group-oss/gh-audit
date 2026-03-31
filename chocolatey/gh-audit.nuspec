@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.chocolatey.org/2010/07/nuspec.xsd">
+  <metadata>
+    <id>gh-audit</id>
+    <version>0.1.0</version>
+    <title>gh-audit</title>
+    <authors>N8 Group</authors>
+    <owners>n8group</owners>
+    <projectUrl>https://n8-group.com</projectUrl>
+    <projectSourceUrl>https://github.com/n8group-oss/gh-audit</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/n8group-oss/gh-audit/issues</bugTrackerUrl>
+    <licenseUrl>https://github.com/n8group-oss/gh-audit/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>GitHub audit, governance, and inventory for organizations.
+
+gh-audit produces JSON inventory, HTML reports, and Excel workbooks
+for GitHub organization auditing, governance, and inventory analysis.
+
+Features:
+- Standard and deep scan profiles
+- Multi-organization scanning via YAML config
+- GitHub App and PAT authentication
+- Offline HTML reports with SVG charts
+- Excel workbook with 10 analysis sheets
+- GitHub Enterprise Server support
+
+A free tool by N8 Group - DevOps Transformation. Executed with Precision.
+https://n8-group.com | sales@n8-group.com</description>
+    <summary>GitHub audit, governance, and inventory tool by N8 Group</summary>
+    <tags>github audit governance inventory devops security compliance</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

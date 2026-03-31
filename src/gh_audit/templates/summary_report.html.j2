@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gh-audit Cross-Organization Summary</title>
+<style>
+/* =========================================================
+   Reset & base
+   ========================================================= */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f5f7fa;
+  color: #24292f;
+  line-height: 1.5;
+}
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* =========================================================
+   Layout
+   ========================================================= */
+.page-wrapper { max-width: 1440px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+
+/* =========================================================
+   Header
+   ========================================================= */
+.site-header {
+  background: #1e2329;
+  color: #e6edf3;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.site-header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+.site-header .badge {
+  background: #4472C4;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2em 0.55em;
+  border-radius: 2em;
+  white-space: nowrap;
+}
+.header-meta { font-size: 0.8rem; color: #8b949e; }
+
+/* =========================================================
+   Scan info bar
+   ========================================================= */
+.scan-info {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 0.85rem 1.2rem;
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 3rem;
+  font-size: 0.85rem;
+}
+.scan-info .info-item { display: flex; flex-direction: column; gap: 0.15rem; }
+.scan-info .info-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #57606a;
+}
+.scan-info .info-value { font-weight: 600; color: #24292f; }
+
+/* =========================================================
+   Section titles
+   ========================================================= */
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #24292f;
+  margin: 2rem 0 0.85rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #d0d7de;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================================
+   Summary cards
+   ========================================================= */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.card {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.card .card-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #57606a;
+}
+.card .card-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #24292f;
+  line-height: 1;
+}
+.card .card-sub {
+  font-size: 0.75rem;
+  color: #57606a;
+}
+.card-value.success-color { color: #1a7f37; }
+.card-value.failed-color  { color: #cf222e; }
+
+/* =========================================================
+   Organizations table
+   ========================================================= */
+.table-wrapper {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+thead th {
+  background: #4472C4;
+  border-bottom: 1px solid #3a63b0;
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  white-space: nowrap;
+}
+thead th:first-child { border-radius: 6px 0 0 0; }
+thead th:last-child  { border-radius: 0 6px 0 0; }
+tbody tr { border-bottom: 1px solid #eef0f2; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #f6f8fa; }
+tbody td { padding: 0.5rem 0.85rem; vertical-align: middle; }
+
+/* Totals row */
+.totals-row td {
+  font-weight: 700;
+  background: #f6f8fa;
+  border-top: 2px solid #d0d7de;
+  color: #24292f;
+}
+
+/* =========================================================
+   Status badges
+   ========================================================= */
+.status-badge {
+  display: inline-block;
+  padding: 0.15em 0.55em;
+  border-radius: 2em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.status-badge.success { background: #dafbe1; color: #1a7f37; }
+.status-badge.failed  { background: #ffebe9; color: #cf222e; }
+
+/* =========================================================
+   Profile pill
+   ========================================================= */
+.profile-pill {
+  display: inline-block;
+  padding: 0.15em 0.6em;
+  border-radius: 2em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.profile-pill.standard { background: #dafbe1; color: #1a7f37; }
+.profile-pill.deep     { background: #ddf4ff; color: #0550ae; }
+.profile-pill.unknown  { background: #eef0f2; color: #57606a; }
+
+/* =========================================================
+   Error cell
+   ========================================================= */
+.error-cell {
+  color: #cf222e;
+  font-size: 0.78rem;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.error-cell[title] { cursor: help; border-bottom: 1px dashed #cf222e; }
+
+/* =========================================================
+   Numeric cells — right-align
+   ========================================================= */
+.num { text-align: right; }
+thead th.num { text-align: right; }
+
+/* =========================================================
+   Footer
+   ========================================================= */
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d0d7de;
+  font-size: 0.75rem;
+  color: #8c959f;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  justify-content: space-between;
+}
+footer strong { color: #57606a; }
+</style>
+</head>
+<body>
+
+<!-- ======================================================
+     Site header
+     ====================================================== -->
+<header class="site-header">
+  <h1>gh-audit &mdash; Cross-Organization Summary</h1>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="header-meta">{{ summary.config_file }}</span>
+    <span class="badge">v{{ summary.tool_version }}</span>
+  </div>
+</header>
+
+<div class="page-wrapper">
+
+  <!-- ====================================================
+       Run info bar
+       ==================================================== -->
+  <div class="scan-info">
+    <div class="info-item">
+      <span class="info-label">Generated At</span>
+      <span class="info-value">{{ summary.generated_at }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Tool Version</span>
+      <span class="info-value">gh-audit {{ summary.tool_version }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Config File</span>
+      <span class="info-value">{{ summary.config_file }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Organizations</span>
+      <span class="info-value">{{ totals.organizations_scanned }}</span>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Overview cards
+       ==================================================== -->
+  <h2 class="section-title">Summary</h2>
+  <div class="cards-grid">
+    <div class="card">
+      <span class="card-label">Organizations</span>
+      <span class="card-value">{{ totals.organizations_scanned }}</span>
+      <span class="card-sub">total scanned</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Succeeded</span>
+      <span class="card-value success-color">{{ totals.organizations_succeeded }}</span>
+      <span class="card-sub">successful scans</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Failed</span>
+      <span class="card-value{% if totals.organizations_failed > 0 %} failed-color{% endif %}">{{ totals.organizations_failed }}</span>
+      <span class="card-sub">failed scans</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Repositories</span>
+      <span class="card-value">{{ totals.total_repos }}</span>
+      <span class="card-sub">across successful orgs</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Total Size</span>
+      <span class="card-value">
+        {%- set size_gb = (totals.total_size_bytes / 1073741824) | round(2) -%}
+        {%- if size_gb >= 1.0 %}{{ size_gb }} GB
+        {%- else %}{{ (totals.total_size_bytes / 1048576) | round(1) }} MB{% endif %}
+      </span>
+      <span class="card-sub">combined repo size</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Members</span>
+      <span class="card-value">{{ totals.total_members }}</span>
+      <span class="card-sub">across successful orgs</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Workflows</span>
+      <span class="card-value">{{ totals.total_workflows }}</span>
+      <span class="card-sub">GitHub Actions files</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Issues</span>
+      <span class="card-value">{{ totals.total_issues }}</span>
+      <span class="card-sub">open issues</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Packages</span>
+      <span class="card-value">{{ totals.total_packages }}</span>
+      <span class="card-sub">registry packages</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Projects</span>
+      <span class="card-value">{{ totals.total_projects }}</span>
+      <span class="card-sub">GitHub Projects</span>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Organizations table
+       ==================================================== -->
+  <h2 class="section-title">Organizations</h2>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Organization</th>
+          <th>Status</th>
+          <th>Profile</th>
+          <th class="num">Repos</th>
+          <th class="num">Size (GB)</th>
+          <th class="num">Members</th>
+          <th class="num">Workflows</th>
+          <th class="num">Issues</th>
+          <th class="num">Packages</th>
+          <th class="num">Projects</th>
+          <th class="num">Duration (s)</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for org in summary.organizations %}
+        <tr>
+          <td><strong>{{ org.name }}</strong></td>
+          <td>
+            <span class="status-badge {{ org.status }}">{{ org.status }}</span>
+          </td>
+          <td>
+            {% if org.scan_profile %}
+              {%- set profile = org.scan_profile | lower -%}
+              <span class="profile-pill {{ profile if profile in ['standard','deep'] else 'unknown' }}">{{ org.scan_profile }}</span>
+            {% else %}
+              <span class="profile-pill unknown">n/a</span>
+            {% endif %}
+          </td>
+          <td class="num">{% if org.status == 'success' %}{{ org.total_repos }}{% else %}&mdash;{% endif %}</td>
+          <td class="num">
+            {% if org.status == 'success' %}
+              {{ (org.total_size_bytes / 1073741824) | round(3) }}
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td class="num">{% if org.status == 'success' %}{{ org.total_members }}{% else %}&mdash;{% endif %}</td>
+          <td class="num">{% if org.status == 'success' %}{{ org.total_workflows }}{% else %}&mdash;{% endif %}</td>
+          <td class="num">{% if org.status == 'success' %}{{ org.total_issues }}{% else %}&mdash;{% endif %}</td>
+          <td class="num">{% if org.status == 'success' %}{{ org.total_packages }}{% else %}&mdash;{% endif %}</td>
+          <td class="num">{% if org.status == 'success' %}{{ org.total_projects }}{% else %}&mdash;{% endif %}</td>
+          <td class="num">{% if org.status == 'success' %}{{ org.duration_seconds | round(1) }}{% else %}&mdash;{% endif %}</td>
+          <td>
+            {% if org.error %}
+              <span class="error-cell" title="{{ org.error }}">{{ org.error }}</span>
+            {% else %}&mdash;{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+
+        <!-- Totals row -->
+        <tr class="totals-row">
+          <td><strong>Totals</strong></td>
+          <td>
+            {{ totals.organizations_succeeded }} ok /
+            {{ totals.organizations_failed }} failed
+          </td>
+          <td>&mdash;</td>
+          <td class="num"><strong>{{ totals.total_repos }}</strong></td>
+          <td class="num"><strong>{{ (totals.total_size_bytes / 1073741824) | round(3) }}</strong></td>
+          <td class="num"><strong>{{ totals.total_members }}</strong></td>
+          <td class="num"><strong>{{ totals.total_workflows }}</strong></td>
+          <td class="num"><strong>{{ totals.total_issues }}</strong></td>
+          <td class="num"><strong>{{ totals.total_packages }}</strong></td>
+          <td class="num"><strong>{{ totals.total_projects }}</strong></td>
+          <td class="num">&mdash;</td>
+          <td>&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ====================================================
+       About N8 Group
+       ==================================================== -->
+  <h2 class="section-title">About {{ branding.company_name }}</h2>
+  <div style="background:#f8f9fa;border:1px solid #d0d7de;border-radius:6px;padding:1.2rem 1.5rem;margin-top:0.5rem;">
+    <p style="margin:0 0 0.8rem;font-size:0.88rem;color:#24292f;">{{ branding.about_text }}</p>
+    <div style="margin-bottom:0.8rem;">
+      <strong style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#57606a;">Our Services</strong>
+      <ul style="margin:0.4rem 0 0 1.2rem;font-size:0.85rem;color:#24292f;">
+        {% for service in branding.services %}
+        <li>{{ service }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div style="font-size:0.85rem;display:flex;flex-wrap:wrap;gap:0.5rem 2rem;">
+      <span><a href="mailto:{{ branding.sales_email }}" style="color:#0366d6;">{{ branding.sales_email }}</a></span>
+      <span><a href="{{ branding.website }}" style="color:#0366d6;">{{ branding.website }}</a></span>
+      <span><a href="{{ branding.linkedin }}" style="color:#0366d6;">LinkedIn</a></span>
+      <span><a href="{{ branding.youtube }}" style="color:#0366d6;">YouTube</a></span>
+    </div>
+  </div>
+
+</div><!-- end .page-wrapper -->
+
+<!-- ======================================================
+     Footer
+     ====================================================== -->
+<footer style="max-width:1440px;margin:0 auto;padding:1rem 1.5rem 2rem;">
+  <div>
+    <span>Generated by <strong>gh-audit v{{ summary.tool_version }}</strong> &mdash; a free tool by <a href="{{ branding.website }}" style="color:#0366d6;">{{ branding.company_name }}</a></span>
+    <br>
+    <span style="font-size:0.72rem;color:#8c959f;">{{ branding.tagline }}</span>
+  </div>
+  <span>{{ summary.generated_at }}</span>
+</footer>
+
+</body>
+</html>

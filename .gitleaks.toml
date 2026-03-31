@@ -1,0 +1,8 @@
+# Gitleaks configuration — allowlisted false positives.
+
+[allowlist]
+  description = "Known false positives"
+  paths = [
+    '''tests/''',
+    '''src/gh_scanner/services/telemetry\.py''',
+  ]

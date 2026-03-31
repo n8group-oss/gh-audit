@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gh-audit Discovery Report &mdash; {{ metadata.organization }}</title>
+<style>
+/* =========================================================
+   Reset & base
+   ========================================================= */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f5f7fa;
+  color: #24292f;
+  line-height: 1.5;
+}
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* =========================================================
+   Layout
+   ========================================================= */
+.page-wrapper { max-width: 1280px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+
+/* =========================================================
+   Header
+   ========================================================= */
+.site-header {
+  background: #1e2329;
+  color: #e6edf3;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.site-header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+.site-header .badge {
+  background: #238636;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2em 0.55em;
+  border-radius: 2em;
+  white-space: nowrap;
+}
+.header-meta { font-size: 0.8rem; color: #8b949e; }
+
+/* =========================================================
+   Warning banner — shown only when scan_warnings present
+   ========================================================= */
+.warning-banner {
+  background: #fff8c5;
+  border: 1px solid #d4a72c;
+  border-left: 4px solid #d4a72c;
+  border-radius: 4px;
+  padding: 0.85rem 1.1rem;
+  margin-top: 1.5rem;
+}
+.warning-banner .warning-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #7d4e00;
+  margin-bottom: 0.4rem;
+}
+.warning-banner ul { margin-left: 1.2rem; }
+.warning-banner li {
+  font-size: 0.85rem;
+  color: #633900;
+  margin-bottom: 0.2rem;
+}
+
+/* =========================================================
+   Section titles
+   ========================================================= */
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #24292f;
+  margin: 2rem 0 0.85rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #d0d7de;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================================
+   Scan info bar
+   ========================================================= */
+.scan-info {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 0.85rem 1.2rem;
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 3rem;
+  font-size: 0.85rem;
+}
+.scan-info .info-item { display: flex; flex-direction: column; gap: 0.15rem; }
+.scan-info .info-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #57606a;
+}
+.scan-info .info-value { font-weight: 600; color: #24292f; }
+.profile-pill {
+  display: inline-block;
+  padding: 0.15em 0.6em;
+  border-radius: 2em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.profile-pill.standard { background: #dafbe1; color: #1a7f37; }
+.profile-pill.deep     { background: #ddf4ff; color: #0550ae; }
+.profile-pill.total    { background: #fae1a0; color: #7d4e00; }
+.profile-pill.unknown  { background: #eef0f2; color: #57606a; }
+
+/* =========================================================
+   Overview cards
+   ========================================================= */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.card {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.card .card-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #57606a;
+}
+.card .card-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #24292f;
+  line-height: 1;
+}
+.card .card-sub {
+  font-size: 0.75rem;
+  color: #57606a;
+}
+
+/* =========================================================
+   Visibility chart — SVG doughnut
+   ========================================================= */
+.chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  align-items: flex-start;
+  margin-top: 0.5rem;
+}
+.chart-container {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+.chart-legend { display: flex; flex-direction: column; gap: 0.45rem; }
+.legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.legend-dot.public   { background: #1a7f37; }
+.legend-dot.private  { background: #0969da; }
+.legend-dot.internal { background: #8250df; }
+
+/* =========================================================
+   Security posture cards
+   ========================================================= */
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.sec-card {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+}
+.sec-card .sec-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #57606a;
+  margin-bottom: 0.5rem;
+}
+.sec-card .sec-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.sec-value.good    { color: #1a7f37; }
+.sec-value.warn    { color: #d4a72c; }
+.sec-value.danger  { color: #cf222e; }
+.sec-value.neutral { color: #57606a; }
+
+/* =========================================================
+   Actions overview bar chart
+   ========================================================= */
+.actions-overview {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 1.2rem;
+  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.2rem;
+}
+.actions-stat .actions-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #57606a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.35rem;
+}
+.bar-track {
+  height: 8px;
+  background: #eef0f2;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.3rem 0;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #0969da;
+  transition: width 0.3s ease;
+}
+.bar-fill.self-hosted { background: #cf222e; }
+.actions-count {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #24292f;
+}
+.actions-sub { font-size: 0.75rem; color: #57606a; }
+
+/* =========================================================
+   Repository table
+   ========================================================= */
+.table-wrapper {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+thead th {
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #57606a;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+thead th:hover { background: #eef0f2; }
+thead th .sort-icon { font-style: normal; margin-left: 0.3em; color: #bbb; }
+thead th.sorted-asc  .sort-icon::after { content: " \25B4"; color: #0969da; }
+thead th.sorted-desc .sort-icon::after { content: " \25BE"; color: #0969da; }
+thead th:not(.sorted-asc):not(.sorted-desc) .sort-icon::after { content: " \25BE"; }
+tbody tr { border-bottom: 1px solid #eef0f2; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #f6f8fa; }
+tbody td { padding: 0.5rem 0.85rem; vertical-align: middle; }
+td.repo-name { font-weight: 600; color: #24292f; }
+td.repo-desc { color: #57606a; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.vis-badge {
+  display: inline-block;
+  padding: 0.12em 0.5em;
+  border-radius: 2em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.vis-badge.public   { background: #dafbe1; color: #1a7f37; }
+.vis-badge.private  { background: #ddf4ff; color: #0550ae; }
+.vis-badge.internal { background: #ffeff7; color: #8250df; }
+.vis-badge.unknown  { background: #eef0f2; color: #57606a; }
+
+.tag-badge {
+  display: inline-block;
+  padding: 0.1em 0.45em;
+  background: #eef0f2;
+  border-radius: 2em;
+  font-size: 0.7rem;
+  color: #57606a;
+  margin: 0.1em;
+}
+.flag-icon { font-style: normal; font-size: 0.9em; }
+
+.alert-na      { color: #8c959f; font-size: 0.78rem; }
+.alert-zero    { color: #1a7f37; font-weight: 700; }
+.alert-nonzero { color: #cf222e; font-weight: 700; }
+
+/* =========================================================
+   Warnings list section (at bottom)
+   ========================================================= */
+.warnings-list {
+  background: #fff;
+  border: 1px solid #d4a72c;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+.warnings-list-header {
+  background: #fff8c5;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #7d4e00;
+  border-bottom: 1px solid #d4a72c;
+}
+.warnings-list ul { margin: 0; padding: 0.75rem 1rem 0.75rem 2rem; }
+.warnings-list li { font-size: 0.83rem; color: #633900; margin-bottom: 0.3rem; }
+
+/* =========================================================
+   Footer
+   ========================================================= */
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d0d7de;
+  font-size: 0.75rem;
+  color: #8c959f;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  justify-content: space-between;
+}
+footer strong { color: #57606a; }
+</style>
+</head>
+<body>
+
+<!-- ======================================================
+     Site header
+     ====================================================== -->
+<header class="site-header">
+  <h1>gh-audit &mdash; Discovery Report</h1>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="header-meta">{{ metadata.organization }}</span>
+    <span class="badge">v{{ metadata.tool_version }}</span>
+  </div>
+</header>
+
+<div class="page-wrapper">
+
+  <!-- ====================================================
+       Scan info bar
+       ==================================================== -->
+  <div class="scan-info">
+    <div class="info-item">
+      <span class="info-label">Scan Profile</span>
+      <span class="info-value">
+        {%- set profile = metadata.scan_profile | lower -%}
+        <span class="profile-pill {{ profile if profile in ['standard','deep','total'] else 'unknown' }}">{{ metadata.scan_profile }}</span>
+      </span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Organization</span>
+      <span class="info-value">{{ metadata.organization }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Generated At</span>
+      <span class="info-value">{{ metadata.generated_at }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Tool Version</span>
+      <span class="info-value">gh-audit {{ metadata.tool_version }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Auth Method</span>
+      <span class="info-value">{{ metadata.auth_method }}</span>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Scan warnings banner — prominent top-of-page notice
+       ==================================================== -->
+  {% if metadata.scan_warnings %}
+  <div class="warning-banner">
+    <div class="warning-title">&#9888; Scan Warnings ({{ metadata.scan_warnings | length }})</div>
+    <ul>
+      {% for w in metadata.scan_warnings %}
+      <li>{{ w }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- ====================================================
+       Overview cards
+       ==================================================== -->
+  <h2 class="section-title">Overview</h2>
+  <div class="cards-grid">
+    <div class="card">
+      <span class="card-label">Repositories</span>
+      <span class="card-value">{{ summary.total_repos }}</span>
+      <span class="card-sub">
+        {{ summary.public_repos }} public &bull;
+        {{ summary.private_repos }} private
+        {%- if summary.internal_repos %} &bull; {{ summary.internal_repos }} internal{% endif %}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Total Size</span>
+      <span class="card-value">
+        {%- set size_mb = (summary.total_size_bytes / 1048576) | round(1) -%}
+        {%- if size_mb >= 1024 %}{{ (size_mb / 1024) | round(1) }} GB
+        {%- else %}{{ size_mb }} MB{% endif %}
+      </span>
+      <span class="card-sub">{{ summary.total_size_bytes | filesizeformat if summary.total_size_bytes else "0 bytes" }}</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Members</span>
+      <span class="card-value">{{ users.total }}</span>
+      <span class="card-sub">{{ users.admins }} admin{{ "s" if users.admins != 1 }} &bull; {{ users.outside_collaborators }} collaborator{{ "s" if users.outside_collaborators != 1 }}</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Open PRs</span>
+      <span class="card-value">{{ summary.total_prs }}</span>
+      <span class="card-sub">across all repos</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Open Issues</span>
+      <span class="card-value">{{ summary.total_issues }}</span>
+      <span class="card-sub">across all repos</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Packages</span>
+      <span class="card-value">{{ summary.total_packages }}</span>
+      <span class="card-sub">
+        {%- if summary.packages_by_type %}
+          {%- for pkg_type, count in summary.packages_by_type.items() %}{{ count }} {{ pkg_type }}{{ " &bull; " if not loop.last }}{% endfor %}
+        {%- else %}no packages found{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Repository visibility chart — SVG doughnut
+       ==================================================== -->
+  <h2 class="section-title">Repository Visibility</h2>
+  <div class="chart-row">
+    <div class="chart-container">
+      {%- set total = summary.total_repos if summary.total_repos > 0 else 1 -%}
+      {%- set pub_pct   = (summary.public_repos   / total * 100) | round(1) -%}
+      {%- set priv_pct  = (summary.private_repos  / total * 100) | round(1) -%}
+      {%- set int_pct   = (summary.internal_repos / total * 100) | round(1) -%}
+
+      {# SVG doughnut: circumference = 2*pi*r = 2*3.14159*40 ~ 251.33 #}
+      {%- set circ = 251.33 -%}
+      {%- set pub_dash  = (pub_pct  / 100 * circ) | round(2) -%}
+      {%- set priv_dash = (priv_pct / 100 * circ) | round(2) -%}
+      {%- set int_dash  = (int_pct  / 100 * circ) | round(2) -%}
+
+      {# Offsets: public starts at top (-62.83 = -circ/4), private follows, internal follows #}
+      {%- set pub_offset  = -62.83 -%}
+      {%- set priv_offset = (pub_offset  - pub_dash)  | round(2) -%}
+      {%- set int_offset  = (priv_offset - priv_dash) | round(2) -%}
+
+      <svg viewBox="0 0 100 100" width="120" height="120" aria-label="Visibility doughnut chart">
+        <!-- background ring -->
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#eef0f2" stroke-width="18"/>
+        <!-- public -->
+        {% if pub_dash > 0 %}
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#1a7f37" stroke-width="18"
+          stroke-dasharray="{{ pub_dash }} {{ circ - pub_dash }}"
+          stroke-dashoffset="{{ pub_offset }}"
+          transform="rotate(-90 50 50)"/>
+        {% endif %}
+        <!-- private -->
+        {% if priv_dash > 0 %}
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#0969da" stroke-width="18"
+          stroke-dasharray="{{ priv_dash }} {{ circ - priv_dash }}"
+          stroke-dashoffset="{{ priv_offset }}"
+          transform="rotate(-90 50 50)"/>
+        {% endif %}
+        <!-- internal -->
+        {% if int_dash > 0 %}
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#8250df" stroke-width="18"
+          stroke-dasharray="{{ int_dash }} {{ circ - int_dash }}"
+          stroke-dashoffset="{{ int_offset }}"
+          transform="rotate(-90 50 50)"/>
+        {% endif %}
+        <!-- center label -->
+        <text x="50" y="47" text-anchor="middle" font-size="14" font-weight="700" fill="#24292f">{{ summary.total_repos }}</text>
+        <text x="50" y="59" text-anchor="middle" font-size="7" fill="#57606a">repos</text>
+      </svg>
+
+      <div class="chart-legend">
+        <div class="legend-item">
+          <span class="legend-dot public"></span>
+          <span>Public <strong>{{ summary.public_repos }}</strong> ({{ pub_pct }}%)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-dot private"></span>
+          <span>Private <strong>{{ summary.private_repos }}</strong> ({{ priv_pct }}%)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-dot internal"></span>
+          <span>Internal <strong>{{ summary.internal_repos }}</strong> ({{ int_pct }}%)</span>
+        </div>
+        <div class="legend-item" style="margin-top:0.3rem;font-size:0.78rem;color:#57606a;">
+          Archived: {{ summary.archived_repos }} &bull; Forks: {{ summary.forked_repos }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Security posture
+       ==================================================== -->
+  <h2 class="section-title">Security Posture</h2>
+  <div class="security-grid">
+    <div class="sec-card">
+      <div class="sec-title">Dependabot Enabled</div>
+      <div class="sec-value {% if summary.repos_with_dependabot == summary.total_repos and summary.total_repos > 0 %}good{% elif summary.repos_with_dependabot == 0 %}danger{% else %}warn{% endif %}">
+        {{ summary.repos_with_dependabot }} / {{ summary.total_repos }}
+      </div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-title">Code Scanning Enabled</div>
+      <div class="sec-value {% if summary.repos_with_code_scanning == summary.total_repos and summary.total_repos > 0 %}good{% elif summary.repos_with_code_scanning == 0 %}danger{% else %}warn{% endif %}">
+        {{ summary.repos_with_code_scanning }} / {{ summary.total_repos }}
+      </div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-title">Secret Scanning Enabled</div>
+      <div class="sec-value {% if summary.repos_with_secret_scanning == summary.total_repos and summary.total_repos > 0 %}good{% elif summary.repos_with_secret_scanning == 0 %}danger{% else %}warn{% endif %}">
+        {{ summary.repos_with_secret_scanning }} / {{ summary.total_repos }}
+      </div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-title">Repos with LFS</div>
+      <div class="sec-value neutral">{{ summary.repos_with_lfs }}</div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-title">Repos with Large Files</div>
+      <div class="sec-value {% if summary.repos_with_large_files > 0 %}warn{% else %}neutral{% endif %}">
+        {{ summary.repos_with_large_files }}
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Actions overview
+       ==================================================== -->
+  <h2 class="section-title">GitHub Actions Overview</h2>
+  <div class="actions-overview">
+    {%- set wf_pct = (summary.repos_with_workflows / (summary.total_repos if summary.total_repos > 0 else 1) * 100) | round(0) | int -%}
+    <div class="actions-stat">
+      <div class="actions-label">Repos with Workflows</div>
+      <div class="actions-count">{{ summary.repos_with_workflows }}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:{{ wf_pct }}%"></div></div>
+      <div class="actions-sub">{{ wf_pct }}% of all repos &bull; {{ summary.total_workflow_count }} workflows total</div>
+    </div>
+    {%- set sh_pct = (summary.repos_with_self_hosted_runners / (summary.total_repos if summary.total_repos > 0 else 1) * 100) | round(0) | int -%}
+    <div class="actions-stat">
+      <div class="actions-label">Self-Hosted Runners</div>
+      <div class="actions-count">{{ summary.repos_with_self_hosted_runners }}</div>
+      <div class="bar-track"><div class="bar-fill self-hosted" style="width:{{ sh_pct }}%"></div></div>
+      <div class="actions-sub">{{ sh_pct }}% of all repos</div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Repository detail table — sortable via JS
+       ==================================================== -->
+  <h2 class="section-title">Repository Detail</h2>
+  <div class="table-wrapper">
+    <table id="repo-table">
+      <thead>
+        <tr>
+          <th data-col="0">Name <i class="sort-icon"></i></th>
+          <th data-col="1">Visibility <i class="sort-icon"></i></th>
+          <th data-col="2">Language <i class="sort-icon"></i></th>
+          <th data-col="3">Size <i class="sort-icon"></i></th>
+          <th data-col="4">Branches <i class="sort-icon"></i></th>
+          <th data-col="5">Open PRs <i class="sort-icon"></i></th>
+          <th data-col="6">Open Issues <i class="sort-icon"></i></th>
+          <th data-col="7">Dependabot <i class="sort-icon"></i></th>
+          <th data-col="8">Code Scan <i class="sort-icon"></i></th>
+          <th data-col="9">Secret Scan <i class="sort-icon"></i></th>
+          <th data-col="10">Workflows <i class="sort-icon"></i></th>
+          <th data-col="11">Flags <i class="sort-icon"></i></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for repo in repositories %}
+        {%- set sec = repo.security -%}
+        <tr>
+          <td class="repo-name" title="{{ repo.description or '' }}">{{ repo.name }}</td>
+          <td>
+            <span class="vis-badge {{ repo.visibility }}">{{ repo.visibility }}</span>
+          </td>
+          <td>{{ repo.language or "&mdash;" }}</td>
+          <td data-sort="{{ repo.size_bytes }}">
+            {%- set mb = (repo.size_bytes / 1048576) | round(2) -%}
+            {%- if mb >= 1024 %}{{ (mb / 1024) | round(1) }} GB
+            {%- elif mb >= 1 %}{{ mb }} MB
+            {%- else %}{{ repo.size_bytes }} B{% endif %}
+          </td>
+          <td>{{ repo.branch_count }}</td>
+          <td>{{ repo.pr_count_open }}</td>
+          <td>{{ repo.issue_count_open }}</td>
+          <td data-sort="{{ sec.dependabot_alerts_open if sec.dependabot_alerts_open is not none else -1 }}">
+            {%- if sec.dependabot_alerts_open is none %}
+              <span class="alert-na">n/a</span>
+            {%- elif sec.counts_exact %}
+              <span class="{% if sec.dependabot_alerts_open == 0 %}alert-zero{% else %}alert-nonzero{% endif %}">{{ sec.dependabot_alerts_open }}</span>
+            {%- else %}
+              <span class="alert-na">~{{ sec.dependabot_alerts_open }}</span>
+            {%- endif %}
+          </td>
+          <td data-sort="{{ sec.code_scanning_alerts_open if sec.code_scanning_alerts_open is not none else -1 }}">
+            {%- if sec.code_scanning_alerts_open is none %}
+              <span class="alert-na">n/a</span>
+            {%- elif sec.counts_exact %}
+              <span class="{% if sec.code_scanning_alerts_open == 0 %}alert-zero{% else %}alert-nonzero{% endif %}">{{ sec.code_scanning_alerts_open }}</span>
+            {%- else %}
+              <span class="alert-na">~{{ sec.code_scanning_alerts_open }}</span>
+            {%- endif %}
+          </td>
+          <td data-sort="{{ sec.secret_scanning_alerts_open if sec.secret_scanning_alerts_open is not none else -1 }}">
+            {%- if sec.secret_scanning_alerts_open is none %}
+              <span class="alert-na">n/a</span>
+            {%- elif sec.counts_exact %}
+              <span class="{% if sec.secret_scanning_alerts_open == 0 %}alert-zero{% else %}alert-nonzero{% endif %}">{{ sec.secret_scanning_alerts_open }}</span>
+            {%- else %}
+              <span class="alert-na">~{{ sec.secret_scanning_alerts_open }}</span>
+            {%- endif %}
+          </td>
+          <td>{{ repo.actions.workflow_count }}</td>
+          <td>
+            {%- if repo.archived %}<span class="tag-badge">archived</span>{% endif -%}
+            {%- if repo.fork %}<span class="tag-badge">fork</span>{% endif -%}
+            {%- if repo.is_template %}<span class="tag-badge">template</span>{% endif -%}
+            {%- if repo.lfs_info.has_lfs %}<span class="tag-badge">lfs</span>{% endif -%}
+            {%- if repo.actions.uses_self_hosted_runners %}<span class="tag-badge">self-hosted</span>{% endif -%}
+            {%- if repo.large_file_scan.files %}<span class="tag-badge">large-files</span>{% endif -%}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ====================================================
+       Scan warnings detail section
+       ==================================================== -->
+  {% if metadata.scan_warnings %}
+  <h2 class="section-title">Scan Warnings Detail</h2>
+  <div class="warnings-list">
+    <div class="warnings-list-header">{{ metadata.scan_warnings | length }} warning{{ "s" if metadata.scan_warnings | length != 1 }} encountered during scan</div>
+    <ul>
+      {% for w in metadata.scan_warnings %}
+      <li>{{ w }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- ====================================================
+       Governance (only when governance category was scanned)
+       ==================================================== -->
+  {% if governance %}
+<section style="max-width:1280px;margin:2rem auto;padding:0 1.5rem;">
+  <h2 style="font-size:1.3em;border-bottom:2px solid #0366d6;padding-bottom:5px;margin-bottom:1rem;">Governance</h2>
+
+  {# Teams #}
+  {% if governance.teams %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Teams ({{ governance.teams|length }})</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Team</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Permission</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Privacy</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Members</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Repos</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Parent</th>
+    </tr></thead>
+    <tbody>
+    {% for team in governance.teams %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ team.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ team.permission }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ team.privacy }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ team.member_count }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ team.repo_count }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ team.parent_team or '-' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Organization Policies #}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Organization Policies</h3>
+  <div style="background:#fff;border-radius:8px;padding:1rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <table style="width:100%;border-collapse:collapse;">
+      {% set policies = governance.org_policies %}
+      {% for key, label in [
+        ('default_repository_permission', 'Default repo permission'),
+        ('two_factor_requirement_enabled', '2FA required'),
+        ('web_commit_signoff_required', 'Web commit sign-off'),
+        ('members_can_create_repositories', 'Members can create repos'),
+        ('members_can_fork_private_repositories', 'Members can fork private repos'),
+        ('members_can_delete_repositories', 'Members can delete repos'),
+      ] %}
+      <tr>
+        <td style="padding:6px 0;color:#57606a;">{{ label }}</td>
+        <td style="padding:6px 0;text-align:right;font-weight:600;">
+          {% if policies[key] is none %}n/a{% elif policies[key] is sameas true %}Yes{% elif policies[key] is sameas false %}No{% else %}{{ policies[key] }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  {# Org Rulesets #}
+  {% if governance.org_rulesets %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Organization Rulesets ({{ governance.org_rulesets|length }})</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Name</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Enforcement</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Target</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Rules</th>
+    </tr></thead>
+    <tbody>
+    {% for rs in governance.org_rulesets %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ rs.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ rs.enforcement }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ rs.target }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ rs.rules|length }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Summary cards #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ governance.custom_roles|length }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Custom Roles</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ governance.org_secrets_count }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Org Secrets</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ governance.org_variables_count }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Org Variables</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ governance.custom_properties_schema|length }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Custom Properties</div>
+    </div>
+  </div>
+</section>
+  {% endif %}
+
+  <!-- ====================================================
+       Operations (only when operations category was scanned)
+       ==================================================== -->
+  {% if operations %}
+<section style="max-width:1280px;margin:2rem auto;padding:0 1.5rem;">
+  <h2 style="font-size:1.3em;border-bottom:2px solid #0366d6;padding-bottom:5px;margin-bottom:1rem;">Operations</h2>
+
+  {# Runners #}
+  {% if operations.runners %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Runners ({{ operations.runners|length }})</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Name</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">OS</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Status</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Labels</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Busy</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Group</th>
+    </tr></thead>
+    <tbody>
+    {% for runner in operations.runners %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ runner.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ runner.os }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ runner.status }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ runner.labels|join(', ') }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ 'Yes' if runner.busy else 'No' }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ runner.runner_group_name or '-' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Runner Groups #}
+  {% if operations.runner_groups %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Runner Groups ({{ operations.runner_groups|length }})</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Name</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Visibility</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Runners</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Repos</th>
+    </tr></thead>
+    <tbody>
+    {% for group in operations.runner_groups %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ group.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ group.visibility }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ group.runner_count }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ group.repo_count if group.repo_count is not none else '-' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Installed Apps #}
+  {% if operations.installed_apps %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Installed Apps ({{ operations.installed_apps|length }})</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Name</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Permissions</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Events</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Repo Selection</th>
+    </tr></thead>
+    <tbody>
+    {% for app in operations.installed_apps %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ app.app_name }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ app.permissions|length }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ app.events|length }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ app.repository_selection }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Org Webhooks #}
+  {% if operations.org_webhooks %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Organization Webhooks ({{ operations.org_webhooks|length }})</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Domain</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Events</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Active</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Content Type</th>
+    </tr></thead>
+    <tbody>
+    {% for hook in operations.org_webhooks %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ hook.url_domain }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ hook.events|length }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ 'Yes' if hook.active else 'No' }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ hook.content_type }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Summary cards #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ operations.runners|length }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Runners</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ operations.runner_groups|length }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Runner Groups</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ operations.installed_apps|length }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Installed Apps</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ operations.org_webhooks|length }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Webhooks</div>
+    </div>
+  </div>
+</section>
+  {% endif %}
+
+  {% if has_security_detail %}
+  <!-- ====================================================
+       Security Detail (only when security category was scanned)
+       ==================================================== -->
+<section id="security-detail" style="margin-bottom:2.5rem;">
+  <h2 style="font-size:1.3em;border-bottom:2px solid #0366d6;padding-bottom:5px;margin-bottom:1rem;">Security Detail</h2>
+
+  {# Aggregate alert counts across all repos #}
+  {% set ns = namespace(dep_total=0, cs_total=0, ss_total=0, dep_crit=0, dep_high=0, repos_with_sbom=0) %}
+  {% for repo in repositories %}
+    {% if repo.security_detail %}
+      {% set ns.dep_total = ns.dep_total + repo.security_detail.dependabot_alerts|length %}
+      {% set ns.cs_total = ns.cs_total + repo.security_detail.code_scanning_alerts|length %}
+      {% set ns.ss_total = ns.ss_total + repo.security_detail.secret_scanning_alerts|length %}
+      {% for alert in repo.security_detail.dependabot_alerts %}
+        {% if alert.severity == "critical" %}{% set ns.dep_crit = ns.dep_crit + 1 %}{% endif %}
+        {% if alert.severity == "high" %}{% set ns.dep_high = ns.dep_high + 1 %}{% endif %}
+      {% endfor %}
+      {% if repo.security_detail.sbom_summary %}{% set ns.repos_with_sbom = ns.repos_with_sbom + 1 %}{% endif %}
+    {% endif %}
+  {% endfor %}
+
+  {# Summary cards #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#cf222e;">{{ ns.dep_total }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Dependabot Alerts</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#bf8700;">{{ ns.cs_total }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Code Scanning Alerts</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#8250df;">{{ ns.ss_total }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Secret Scanning Alerts</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ ns.repos_with_sbom }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Repos with SBOM</div>
+    </div>
+  </div>
+
+  {# Dependabot alerts table #}
+  {% if ns.dep_total > 0 %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Dependabot Alerts ({{ ns.dep_total }})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:1.5rem;">
+    <thead>
+    <tr style="background:#f6f8fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Repository</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Severity</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Package</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">State</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">CVE</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Fixed Version</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for repo in repositories %}
+      {% if repo.security_detail %}
+        {% for alert in repo.security_detail.dependabot_alerts %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ repo.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">
+        {% if alert.severity == "critical" %}<span style="background:#cf222e;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75em;">critical</span>
+        {% elif alert.severity == "high" %}<span style="background:#bf8700;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75em;">high</span>
+        {% elif alert.severity == "medium" %}<span style="background:#e3b341;color:#24292f;padding:2px 6px;border-radius:3px;font-size:0.75em;">medium</span>
+        {% else %}<span style="background:#57606a;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75em;">{{ alert.severity }}</span>
+        {% endif %}
+      </td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.package_name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.state }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.cve_id or "" }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.fixed_version or "" }}</td>
+    </tr>
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Code scanning alerts table #}
+  {% if ns.cs_total > 0 %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Code Scanning Alerts ({{ ns.cs_total }})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:1.5rem;">
+    <thead>
+    <tr style="background:#f6f8fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Repository</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Rule</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Severity</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Tool</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">State</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for repo in repositories %}
+      {% if repo.security_detail %}
+        {% for alert in repo.security_detail.code_scanning_alerts %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ repo.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.rule_id }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">
+        {% if alert.security_severity == "critical" %}<span style="background:#cf222e;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75em;">critical</span>
+        {% elif alert.security_severity == "high" %}<span style="background:#bf8700;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75em;">high</span>
+        {% elif alert.security_severity == "medium" %}<span style="background:#e3b341;color:#24292f;padding:2px 6px;border-radius:3px;font-size:0.75em;">medium</span>
+        {% elif alert.security_severity %}<span style="background:#57606a;color:#fff;padding:2px 6px;border-radius:3px;font-size:0.75em;">{{ alert.security_severity }}</span>
+        {% else %}{{ alert.severity or "" }}
+        {% endif %}
+      </td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.tool_name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.state }}</td>
+    </tr>
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Secret scanning alerts table #}
+  {% if ns.ss_total > 0 %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Secret Scanning Alerts ({{ ns.ss_total }})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:1.5rem;">
+    <thead>
+    <tr style="background:#f6f8fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Repository</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Secret Type</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">State</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Resolution</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #d0d7de;">Push Protection Bypassed</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for repo in repositories %}
+      {% if repo.security_detail %}
+        {% for alert in repo.security_detail.secret_scanning_alerts %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ repo.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.secret_type_display_name or alert.secret_type }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.state }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ alert.resolution or "" }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ "Yes" if alert.push_protection_bypassed else "No" }}</td>
+    </tr>
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+</section>
+  {% endif %}
+
+  <!-- ====================================================
+       Adoption (only when adoption category was scanned)
+       ==================================================== -->
+  {% if adoption %}
+<section style="max-width:1280px;margin:2rem auto;padding:0 1.5rem;">
+  <h2 style="font-size:1.3em;border-bottom:2px solid #0366d6;padding-bottom:5px;margin-bottom:1rem;">Adoption</h2>
+
+  {# Copilot #}
+  {% if adoption.copilot %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Copilot</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.copilot.total_seats }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Total Seats</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.copilot.active_seats if adoption.copilot.active_seats is not none else 'n/a' }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Active Seats</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.copilot.suggestions_count if adoption.copilot.suggestions_count is not none else 'n/a' }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Suggestions (28d)</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.copilot.acceptances_count if adoption.copilot.acceptances_count is not none else 'n/a' }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Acceptances (28d)</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Community Health summary #}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Community Health</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.org_community_health.average_health_percentage|round(1) }}%</div>
+      <div style="color:#57606a;font-size:0.9em;">Avg Health</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.org_community_health.repos_with_readme }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Repos with README</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.org_community_health.repos_with_license }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Repos with License</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ adoption.org_community_health.repos_with_contributing }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Repos with Contributing</div>
+    </div>
+  </div>
+
+  {# Traffic table #}
+  {% set traffic_repos = [] %}
+  {% for repo in repositories %}
+    {% if repo.traffic %}{% if traffic_repos.append(repo) %}{% endif %}{% endif %}
+  {% endfor %}
+  {% if traffic_repos %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Traffic (Last 14 Days)</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Repository</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Views</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Unique Visitors</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Clones</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Unique Cloners</th>
+    </tr></thead>
+    <tbody>
+    {% for repo in traffic_repos %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ repo.name }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.traffic.views_14d if repo.traffic.views_14d is not none else 'n/a' }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.traffic.unique_visitors_14d if repo.traffic.unique_visitors_14d is not none else 'n/a' }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.traffic.clones_14d if repo.traffic.clones_14d is not none else 'n/a' }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.traffic.unique_cloners_14d if repo.traffic.unique_cloners_14d is not none else 'n/a' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Commit Activity table #}
+  {% set activity_repos = [] %}
+  {% for repo in repositories %}
+    {% if repo.commit_activity_90d %}{% if activity_repos.append(repo) %}{% endif %}{% endif %}
+  {% endfor %}
+  {% if activity_repos %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Commit Activity (Last 90 Days)</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Repository</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Total Commits</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Active Weeks</th>
+    </tr></thead>
+    <tbody>
+    {% for repo in activity_repos %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ repo.name }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.commit_activity_90d.total_commits }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.commit_activity_90d.active_weeks }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Actions Runs table #}
+  {% set runs_repos = [] %}
+  {% for repo in repositories %}
+    {% if repo.actions_run_summary %}{% if runs_repos.append(repo) %}{% endif %}{% endif %}
+  {% endfor %}
+  {% if runs_repos %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Actions Runs (Last 90 Days)</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Repository</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Total Runs</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Success</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Failure</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Cancelled</th>
+    </tr></thead>
+    <tbody>
+    {% for repo in runs_repos %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ repo.name }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.actions_run_summary.total_runs_90d }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.actions_run_summary.by_conclusion.get('success', 0) }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.actions_run_summary.by_conclusion.get('failure', 0) }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ repo.actions_run_summary.by_conclusion.get('cancelled', 0) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+</section>
+  {% endif %}
+
+  <!-- ====================================================
+       Enterprise (only when enterprise category was scanned)
+       ==================================================== -->
+  {% if enterprise %}
+<section style="max-width:1280px;margin:2rem auto;padding:0 1.5rem;">
+  <h2 style="font-size:1.3em;border-bottom:2px solid #0366d6;padding-bottom:5px;margin-bottom:1rem;">Enterprise: {{ enterprise.name }}</h2>
+
+  {# Overview cards #}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Overview</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ enterprise.members_count }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Members</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ enterprise.admins_count }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Admins</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ enterprise.outside_collaborators_count }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Outside Collaborators</div>
+    </div>
+  </div>
+
+  {# SAML #}
+  {% if enterprise.saml %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">SAML / SSO</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Property</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Value</th>
+    </tr></thead>
+    <tbody>
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">Enabled</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ 'Yes' if enterprise.saml.enabled else 'No' }}</td>
+    </tr>
+    {% if enterprise.saml.issuer %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">Issuer</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ enterprise.saml.issuer }}</td>
+    </tr>
+    {% endif %}
+    {% if enterprise.saml.sso_url %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">SSO URL</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ enterprise.saml.sso_url }}</td>
+    </tr>
+    {% endif %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Billing #}
+  {% if enterprise.billing %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Billing</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ enterprise.billing.used_licenses }} / {{ enterprise.billing.total_licenses }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Licenses Used</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ enterprise.billing.storage_usage_gb }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Storage (GB)</div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;">
+      <div style="font-size:1.8em;font-weight:bold;color:#0366d6;">{{ enterprise.billing.bandwidth_usage_gb }}</div>
+      <div style="color:#57606a;font-size:0.9em;">Bandwidth (GB)</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# IP Allow List #}
+  {% if enterprise.ip_allow_list %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">IP Allow List</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Property</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Value</th>
+    </tr></thead>
+    <tbody>
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">Enabled</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ 'Yes' if enterprise.ip_allow_list.enabled else 'No' }}</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">Entries</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ enterprise.ip_allow_list.entries_count }}</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">For Installed Apps</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ 'Yes' if enterprise.ip_allow_list.for_installed_apps else 'No' }}</td>
+    </tr>
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# Verified Domains #}
+  {% if enterprise.verified_domains %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Verified Domains</h3>
+  <p style="background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    {{ enterprise.verified_domains | join(', ') }}
+  </p>
+  {% endif %}
+
+  {# Enterprise Teams #}
+  {% if enterprise.enterprise_teams %}
+  <h3 style="font-size:1.1em;margin:1.5rem 0 0.5rem;">Enterprise Teams</h3>
+  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:1.5rem;">
+    <thead><tr style="background:#f8f9fa;">
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Name</th>
+      <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #eee;">Slug</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Members</th>
+      <th style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">Orgs</th>
+    </tr></thead>
+    <tbody>
+    {% for team in enterprise.enterprise_teams %}
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ team.name }}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;">{{ team.slug }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ team.member_count }}</td>
+      <td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee;">{{ team.org_count }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+</section>
+  {% endif %}
+
+  <!-- ====================================================
+       About N8 Group
+       ==================================================== -->
+  <h2 class="section-title">About {{ branding.company_name }}</h2>
+  <div style="background:#f8f9fa;border:1px solid #d0d7de;border-radius:6px;padding:1.2rem 1.5rem;margin-top:0.5rem;">
+    <p style="margin:0 0 0.8rem;font-size:0.88rem;color:#24292f;">{{ branding.about_text }}</p>
+    <div style="margin-bottom:0.8rem;">
+      <strong style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#57606a;">Our Services</strong>
+      <ul style="margin:0.4rem 0 0 1.2rem;font-size:0.85rem;color:#24292f;">
+        {% for service in branding.services %}
+        <li>{{ service }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div style="font-size:0.85rem;display:flex;flex-wrap:wrap;gap:0.5rem 2rem;">
+      <span><a href="mailto:{{ branding.sales_email }}" style="color:#0366d6;">{{ branding.sales_email }}</a></span>
+      <span><a href="{{ branding.website }}" style="color:#0366d6;">{{ branding.website }}</a></span>
+      <span><a href="{{ branding.linkedin }}" style="color:#0366d6;">LinkedIn</a></span>
+      <span><a href="{{ branding.youtube }}" style="color:#0366d6;">YouTube</a></span>
+    </div>
+  </div>
+
+</div><!-- /.page-wrapper -->
+
+<!-- ======================================================
+     Footer
+     ====================================================== -->
+<footer style="max-width:1280px;margin:0 auto;padding:0 1.5rem 1.5rem;">
+  <div>
+    <span>Generated by <strong>gh-audit</strong> v{{ metadata.tool_version }} &mdash; a free tool by <a href="{{ branding.website }}" style="color:#0366d6;">{{ branding.company_name }}</a></span>
+    <br>
+    <span style="font-size:0.72rem;color:#8c959f;">{{ branding.tagline }}</span>
+  </div>
+  <div style="text-align:right;">
+    <span>Organization: <strong>{{ metadata.organization }}</strong></span>
+    <br>
+    <span>Generated: {{ metadata.generated_at }}</span>
+  </div>
+</footer>
+
+<!-- ======================================================
+     Inline JS — table sorting only, no external deps
+     ====================================================== -->
+<script>
+(function () {
+  "use strict";
+  var table = document.getElementById("repo-table");
+  if (!table) return;
+
+  var headers = table.querySelectorAll("thead th");
+  var sortCol = -1;
+  var sortAsc = true;
+
+  function cellValue(row, col) {
+    var cell = row.cells[col];
+    if (!cell) return "";
+    var sortVal = cell.getAttribute("data-sort");
+    if (sortVal !== null) return parseFloat(sortVal);
+    return cell.textContent.trim().toLowerCase();
+  }
+
+  function sortRows(col) {
+    var tbody = table.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.rows);
+    var asc = (col === sortCol) ? !sortAsc : true;
+
+    rows.sort(function (a, b) {
+      var av = cellValue(a, col);
+      var bv = cellValue(b, col);
+      if (typeof av === "number" && typeof bv === "number") {
+        return asc ? av - bv : bv - av;
+      }
+      av = String(av); bv = String(bv);
+      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+
+    rows.forEach(function (r) { tbody.appendChild(r); });
+
+    headers.forEach(function (h) {
+      h.classList.remove("sorted-asc", "sorted-desc");
+    });
+    headers[col].classList.add(asc ? "sorted-asc" : "sorted-desc");
+
+    sortCol = col;
+    sortAsc = asc;
+  }
+
+  headers.forEach(function (th, i) {
+    th.addEventListener("click", function () { sortRows(i); });
+  });
+}());
+</script>
+</body>
+</html>

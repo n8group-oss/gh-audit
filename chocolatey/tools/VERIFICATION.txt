@@ -1,0 +1,12 @@
+VERIFICATION
+
+The gh-audit binary is downloaded from the official GitHub Releases page:
+https://github.com/n8group-oss/gh-audit/releases
+
+To verify the download:
+1. Download the .zip from the release page
+2. Compute SHA256: Get-FileHash gh-audit-windows-amd64.zip -Algorithm SHA256
+3. Compare with the checksum in chocolateyInstall.ps1
+
+Project: https://github.com/n8group-oss/gh-audit
+License: BUSL-1.1 (https://github.com/n8group-oss/gh-audit/blob/main/LICENSE)

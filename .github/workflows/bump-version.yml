@@ -1,0 +1,40 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    if: "!startsWith(github.event.head_commit.message, 'bump:')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record pre-bump state
+        id: pre
+        run: echo "latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
+
+      - name: Create bump and changelog
+        uses: commitizen-tools/commitizen-action@0.23.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          no_raise: "21"
+
+      - name: Check for new tag
+        run: |
+          git fetch --tags
+          NEW_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo '')
+          OLD_TAG="${{ steps.pre.outputs.latest_tag }}"
+          if [ "$NEW_TAG" != "$OLD_TAG" ] && [ -n "$NEW_TAG" ]; then
+            echo "New tag detected: $NEW_TAG (was: $OLD_TAG)"
+            echo "Tag push will trigger release.yml automatically."
+          else
+            echo "No new tag created, skipping release."
+          fi

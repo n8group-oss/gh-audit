@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gh-audit Assessment Report &mdash; {{ organization }}</title>
+<style>
+/* =========================================================
+   Reset & base
+   ========================================================= */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f8f9fa;
+  color: #24292f;
+  line-height: 1.5;
+}
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* =========================================================
+   Layout
+   ========================================================= */
+.page-wrapper { max-width: 1280px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+
+/* =========================================================
+   Header
+   ========================================================= */
+.site-header {
+  background: #1e2329;
+  color: #e6edf3;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.site-header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+.site-header .badge {
+  background: #238636;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2em 0.55em;
+  border-radius: 2em;
+  white-space: nowrap;
+}
+.header-meta { font-size: 0.8rem; color: #8b949e; }
+
+/* =========================================================
+   Scan info bar
+   ========================================================= */
+.scan-info {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 0.85rem 1.2rem;
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 3rem;
+  font-size: 0.85rem;
+}
+.scan-info .info-item { display: flex; flex-direction: column; gap: 0.15rem; }
+.scan-info .info-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #57606a;
+}
+.scan-info .info-value { font-weight: 600; color: #24292f; }
+.profile-pill {
+  display: inline-block;
+  padding: 0.15em 0.6em;
+  border-radius: 2em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.profile-pill.standard { background: #dafbe1; color: #1a7f37; }
+.profile-pill.deep     { background: #ddf4ff; color: #0550ae; }
+.profile-pill.total    { background: #fae1a0; color: #7d4e00; }
+.profile-pill.unknown  { background: #eef0f2; color: #57606a; }
+
+/* =========================================================
+   Section titles
+   ========================================================= */
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #24292f;
+  margin: 2rem 0 0.85rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #d0d7de;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================================
+   Executive summary cards
+   ========================================================= */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.summary-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.summary-card .card-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+}
+.summary-card .card-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.summary-card.critical { background: #dc3545; }
+.summary-card.warning  { background: #f0ad4e; }
+.summary-card.info     { background: #0366d6; }
+.summary-card.total    { background: #57606a; }
+
+/* =========================================================
+   Pillar breakdown cards
+   ========================================================= */
+.pillar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.pillar-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.pillar-card .pillar-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: #24292f;
+  margin-bottom: 0.5rem;
+}
+.pillar-card .pillar-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: #57606a;
+}
+.pillar-card .pillar-counts .count-row {
+  display: flex;
+  justify-content: space-between;
+}
+.pillar-card .pillar-total {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid #eef0f2;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #24292f;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* =========================================================
+   Findings table
+   ========================================================= */
+.table-wrapper {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+thead th {
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #57606a;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+thead th:hover { background: #eef0f2; }
+thead th .sort-icon { font-style: normal; margin-left: 0.3em; color: #bbb; }
+thead th.sorted-asc  .sort-icon::after { content: " \25B4"; color: #0969da; }
+thead th.sorted-desc .sort-icon::after { content: " \25BE"; color: #0969da; }
+thead th:not(.sorted-asc):not(.sorted-desc) .sort-icon::after { content: " \25BE"; }
+tbody tr { border-bottom: 1px solid #eef0f2; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #f6f8fa; }
+tbody td { padding: 0.5rem 0.85rem; vertical-align: middle; }
+
+/* =========================================================
+   Severity badges
+   ========================================================= */
+.severity-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.85em;
+  font-weight: bold;
+}
+.severity-badge.critical { background: #dc3545; }
+.severity-badge.warning  { background: #f0ad4e; }
+.severity-badge.info     { background: #0366d6; }
+
+/* =========================================================
+   No-findings card
+   ========================================================= */
+.no-findings {
+  background: #fff;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+.no-findings .nf-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a7f37;
+  margin-bottom: 0.5rem;
+}
+.no-findings .nf-detail {
+  font-size: 0.88rem;
+  color: #57606a;
+}
+
+/* =========================================================
+   Footer
+   ========================================================= */
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d0d7de;
+  font-size: 0.75rem;
+  color: #8c959f;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  justify-content: space-between;
+}
+footer strong { color: #57606a; }
+</style>
+</head>
+<body>
+
+<!-- ======================================================
+     Site header
+     ====================================================== -->
+<header class="site-header">
+  <h1>gh-audit &mdash; Assessment Report</h1>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="header-meta">{{ organization }}</span>
+    <span class="badge">Assessment</span>
+  </div>
+</header>
+
+<div class="page-wrapper">
+
+  <!-- ====================================================
+       Scan info bar
+       ==================================================== -->
+  <div class="scan-info">
+    <div class="info-item">
+      <span class="info-label">Scan Profile</span>
+      <span class="info-value">
+        {%- set profile = scan_profile | lower -%}
+        <span class="profile-pill {{ profile if profile in ['standard','deep','total'] else 'unknown' }}">{{ scan_profile }}</span>
+      </span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Organization</span>
+      <span class="info-value">{{ organization }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Assessment Date</span>
+      <span class="info-value">{{ generated_at }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Inventory Date</span>
+      <span class="info-value">{{ inventory_generated_at }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Active Categories</span>
+      <span class="info-value">{{ active_categories | join(", ") }}</span>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Executive Summary
+       ==================================================== -->
+  <h2 class="section-title">Executive Summary</h2>
+  <div class="summary-grid">
+    <div class="summary-card critical">
+      <span class="card-label">Critical</span>
+      <span class="card-value">{{ count_critical }}</span>
+    </div>
+    <div class="summary-card warning">
+      <span class="card-label">Warning</span>
+      <span class="card-value">{{ count_warning }}</span>
+    </div>
+    <div class="summary-card info">
+      <span class="card-label">Info</span>
+      <span class="card-value">{{ count_info }}</span>
+    </div>
+    <div class="summary-card total">
+      <span class="card-label">Total</span>
+      <span class="card-value">{{ count_total }}</span>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       Limited Assessment Warning
+       ==================================================== -->
+  {% if unassessed_pillars %}
+  <div style="background:#fff8c5;border:1px solid #d4a72c;border-radius:6px;padding:0.85rem 1.2rem;margin-top:1.5rem;font-size:0.85rem;color:#6a5300;">
+    <strong>Limited assessment:</strong>
+    The following pillars could not be assessed because the required discovery categories were not scanned:
+    <strong>{{ unassessed_pillars | map('capitalize') | join(', ') }}</strong>.
+    Run <code>gh-audit discover</code> with the appropriate <code>--category</code> flags for a complete assessment.
+  </div>
+  {% endif %}
+
+  <!-- ====================================================
+       Pillar Breakdown
+       ==================================================== -->
+  {% if pillar_counts or unassessed_pillars %}
+  <h2 class="section-title">Pillar Breakdown</h2>
+  <div class="pillar-grid">
+    {% for pillar_name, counts in pillar_counts.items() %}
+    <div class="pillar-card">
+      <div class="pillar-name">{{ pillar_name | capitalize }}</div>
+      <div class="pillar-counts">
+        <div class="count-row"><span>Critical</span><span style="color:#dc3545;font-weight:700;">{{ counts.critical }}</span></div>
+        <div class="count-row"><span>Warning</span><span style="color:#f0ad4e;font-weight:700;">{{ counts.warning }}</span></div>
+        <div class="count-row"><span>Info</span><span style="color:#0366d6;font-weight:700;">{{ counts.info }}</span></div>
+      </div>
+      <div class="pillar-total"><span>Total</span><span>{{ counts.total }}</span></div>
+    </div>
+    {% endfor %}
+    {% for pillar_name in unassessed_pillars %}
+    <div class="pillar-card" style="opacity:0.6;">
+      <div class="pillar-name">{{ pillar_name | capitalize }}</div>
+      <div style="font-size:0.82rem;color:#8c959f;font-style:italic;">Not assessed</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ====================================================
+       Findings
+       ==================================================== -->
+  <h2 class="section-title">Findings</h2>
+
+  {% if count_total == 0 %}
+  <div class="no-findings">
+    <div class="nf-title">No findings</div>
+    <div class="nf-detail">The assessment did not identify any findings for the scanned categories. Great job!</div>
+  </div>
+  {% else %}
+
+  <!-- Filter controls -->
+  <div id="filter-controls" style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-bottom:1rem;padding:1rem;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div>
+      <strong style="font-size:0.85em;color:#57606a;margin-right:0.5rem;">Severity:</strong>
+      <label style="font-size:0.85em;margin-right:0.5rem;cursor:pointer;">
+        <input type="checkbox" class="filter-severity" value="critical" checked onchange="applyFilters()"> Critical
+      </label>
+      <label style="font-size:0.85em;margin-right:0.5rem;cursor:pointer;">
+        <input type="checkbox" class="filter-severity" value="warning" checked onchange="applyFilters()"> Warning
+      </label>
+      <label style="font-size:0.85em;cursor:pointer;">
+        <input type="checkbox" class="filter-severity" value="info" checked onchange="applyFilters()"> Info
+      </label>
+    </div>
+    <div>
+      <strong style="font-size:0.85em;color:#57606a;margin-right:0.5rem;">Pillar:</strong>
+      {% for pillar_name in pillar_counts %}
+      <label style="font-size:0.85em;margin-right:0.5rem;cursor:pointer;">
+        <input type="checkbox" class="filter-pillar" value="{{ pillar_name }}" checked onchange="applyFilters()"> {{ pillar_name | capitalize }}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table id="findings-table">
+      <thead>
+        <tr>
+          <th>Severity <i class="sort-icon"></i></th>
+          <th>Rule ID <i class="sort-icon"></i></th>
+          <th>Pillar <i class="sort-icon"></i></th>
+          <th>Scope <i class="sort-icon"></i></th>
+          <th>Repository <i class="sort-icon"></i></th>
+          <th>Title <i class="sort-icon"></i></th>
+          <th>Remediation <i class="sort-icon"></i></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in findings %}
+        <tr data-severity="{{ f.severity }}" data-pillar="{{ f.pillar }}">
+          <td data-sort="{{ '0' if f.severity == 'critical' else ('1' if f.severity == 'warning' else '2') }}">
+            <span class="severity-badge {{ f.severity }}">{{ f.severity | capitalize }}</span>
+          </td>
+          <td>{{ f.rule_id }}</td>
+          <td>{{ f.pillar | capitalize }}</td>
+          <td>{{ f.scope }}</td>
+          <td>{% if f.repo_name %}{{ f.repo_name }}{% else %}&mdash;{% endif %}</td>
+          <td>{{ f.title }}</td>
+          <td>{{ f.remediation }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- ====================================================
+       About N8 Group
+       ==================================================== -->
+  <h2 class="section-title">About {{ branding.company_name }}</h2>
+  <div style="background:#f8f9fa;border:1px solid #d0d7de;border-radius:6px;padding:1.2rem 1.5rem;margin-top:0.5rem;">
+    <p style="margin:0 0 0.8rem;font-size:0.88rem;color:#24292f;">{{ branding.about_text }}</p>
+    <div style="margin-bottom:0.8rem;">
+      <strong style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#57606a;">Our Services</strong>
+      <ul style="margin:0.4rem 0 0 1.2rem;font-size:0.85rem;color:#24292f;">
+        {% for service in branding.services %}
+        <li>{{ service }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div style="font-size:0.85rem;display:flex;flex-wrap:wrap;gap:0.5rem 2rem;">
+      <span><a href="mailto:{{ branding.sales_email }}" style="color:#0366d6;">{{ branding.sales_email }}</a></span>
+      <span><a href="{{ branding.website }}" style="color:#0366d6;">{{ branding.website }}</a></span>
+      <span><a href="{{ branding.linkedin }}" style="color:#0366d6;">LinkedIn</a></span>
+      <span><a href="{{ branding.youtube }}" style="color:#0366d6;">YouTube</a></span>
+    </div>
+  </div>
+
+</div><!-- /.page-wrapper -->
+
+<!-- ======================================================
+     Footer
+     ====================================================== -->
+<footer style="max-width:1280px;margin:0 auto;padding:0 1.5rem 1.5rem;">
+  <div>
+    <span>Generated by <strong>gh-audit</strong> &mdash; a free tool by <a href="{{ branding.website }}" style="color:#0366d6;">{{ branding.company_name }}</a></span>
+    <br>
+    <span style="font-size:0.72rem;color:#8c959f;">{{ branding.tagline }}</span>
+  </div>
+  <div style="text-align:right;">
+    <span>Organization: <strong>{{ organization }}</strong></span>
+    <br>
+    <span>Generated: {{ generated_at }}</span>
+  </div>
+</footer>
+
+<!-- ======================================================
+     Inline JS — table sorting only, no external deps
+     ====================================================== -->
+<script>
+(function () {
+  "use strict";
+  var table = document.getElementById("findings-table");
+  if (!table) return;
+
+  var headers = table.querySelectorAll("thead th");
+  var sortCol = -1;
+  var sortAsc = true;
+
+  function cellValue(row, col) {
+    var cell = row.cells[col];
+    if (!cell) return "";
+    var sortVal = cell.getAttribute("data-sort");
+    if (sortVal !== null) return parseFloat(sortVal);
+    return cell.textContent.trim().toLowerCase();
+  }
+
+  function sortRows(col) {
+    var tbody = table.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.rows);
+    var asc = (col === sortCol) ? !sortAsc : true;
+
+    rows.sort(function (a, b) {
+      var av = cellValue(a, col);
+      var bv = cellValue(b, col);
+      if (typeof av === "number" && typeof bv === "number") {
+        return asc ? av - bv : bv - av;
+      }
+      av = String(av); bv = String(bv);
+      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+
+    rows.forEach(function (r) { tbody.appendChild(r); });
+
+    headers.forEach(function (h) {
+      h.classList.remove("sorted-asc", "sorted-desc");
+    });
+    headers[col].classList.add(asc ? "sorted-asc" : "sorted-desc");
+
+    sortCol = col;
+    sortAsc = asc;
+  }
+
+  headers.forEach(function (th, i) {
+    th.addEventListener("click", function () { sortRows(i); });
+  });
+}());
+
+function applyFilters() {
+  var table = document.getElementById("findings-table");
+  if (!table) return;
+  var severities = Array.prototype.slice.call(
+    document.querySelectorAll(".filter-severity:checked")
+  ).map(function (cb) { return cb.value; });
+  var pillars = Array.prototype.slice.call(
+    document.querySelectorAll(".filter-pillar:checked")
+  ).map(function (cb) { return cb.value; });
+  var rows = table.tBodies[0].rows;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var sev = row.getAttribute("data-severity");
+    var pil = row.getAttribute("data-pillar");
+    var show = severities.indexOf(sev) !== -1 && pillars.indexOf(pil) !== -1;
+    row.style.display = show ? "" : "none";
+  }
+}
+</script>
+</body>
+</html>

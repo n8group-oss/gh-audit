@@ -30,14 +30,24 @@ brew install gh-audit
 ### Chocolatey (Windows)
 
 ```powershell
-choco install gh-audit --source="https://github.com/n8group-oss/gh-audit/releases"
+choco install gh-audit
+```
+
+New Chocolatey packages can take time to appear publicly while community
+moderation completes. If `gh-audit` is not visible yet, download the `.nupkg`
+asset from [GitHub Releases](https://github.com/n8group-oss/gh-audit/releases)
+and install it from the folder where you saved it:
+
+```powershell
+choco install gh-audit --source="'C:\path\to\package-folder'"
 ```
 
 ### Direct download
 
-Download standalone binaries from
+Download standalone binaries, checksums, and release artifacts from
 [GitHub Releases](https://github.com/n8group-oss/gh-audit/releases).
-Available for Linux (amd64), macOS (amd64, arm64), and Windows (amd64).
+Standalone executables are available for Linux (amd64), macOS (amd64, arm64),
+and Windows (amd64).
 
 ## Quick Start
 

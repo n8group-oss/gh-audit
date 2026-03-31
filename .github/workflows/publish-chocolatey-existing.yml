@@ -1,0 +1,44 @@
+name: Publish Existing Chocolatey Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish to Chocolatey, for example v0.1.2"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Existing Chocolatey Package
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download nupkg from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          gh release download $env:TAG `
+            --repo "${{ github.repository }}" `
+            --pattern "gh-audit.*.nupkg" `
+            --dir dist/
+
+      - name: Publish to Chocolatey Community Repository
+        shell: pwsh
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          $nupkg = Get-ChildItem dist\gh-audit.*.nupkg | Select-Object -First 1
+          if (-not $nupkg) {
+            throw "Unable to find Chocolatey package in dist\\"
+          }
+
+          choco apikey --key "$env:CHOCOLATEY_API_KEY" --source https://push.chocolatey.org/
+          choco push $nupkg.FullName --source https://push.chocolatey.org/

@@ -460,8 +460,13 @@ jobs:
           VERSION: ${{ needs.build-python.outputs.version }}
         shell: bash
         run: |
+          NUPKG=$(find dist -maxdepth 1 -name 'gh-audit.*.nupkg' -print -quit)
+          if [[ -z "${NUPKG}" ]]; then
+            echo "Unable to find Chocolatey package in dist/" >&2
+            exit 1
+          fi
           gh release upload "v${VERSION}" \
-            dist/gh-audit.*.nupkg \
+            "${NUPKG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --clobber
 
@@ -470,5 +475,9 @@ jobs:
         env:
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
         run: |
+          $nupkg = Get-ChildItem dist\gh-audit.*.nupkg | Select-Object -First 1
+          if (-not $nupkg) {
+            throw "Unable to find Chocolatey package in dist\\"
+          }
           choco apikey --key "$env:CHOCOLATEY_API_KEY" --source https://push.chocolatey.org/
-          choco push dist\gh-audit.*.nupkg --source https://push.chocolatey.org/
+          choco push $nupkg.FullName --source https://push.chocolatey.org/

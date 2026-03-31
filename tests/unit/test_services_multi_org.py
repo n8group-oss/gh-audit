@@ -534,7 +534,9 @@ class TestRunAllOrgs:
             output_dir=tmp_path,
         )
 
-        assert summary.tool_version == "0.1.0"
+        from gh_audit.__about__ import __version__
+
+        assert summary.tool_version == __version__
 
     @pytest.mark.asyncio
     async def test_clients_are_closed_on_success(

@@ -147,17 +147,24 @@ def init() -> None:
     # Verify credentials before writing .env
     if choice == "2":
         # PAT: verify via API
-        rest = GitHubRestClient(token=token, base_url="https://api.github.com")
+
+        async def _verify_pat() -> dict:
+            rest = GitHubRestClient(token=token, base_url="https://api.github.com")
+            try:
+                return await rest.verify_credentials(organization)
+            finally:
+                await rest.close()
+
         try:
-            result = asyncio.run(rest.verify_credentials(organization))
+            result = asyncio.run(_verify_pat())
             org_name = result.get("login", organization)
             print_ok(f"Credentials verified for organization: {org_name}")
+        except typer.Exit:
+            raise
         except Exception as exc:
             print_error(f"Credential verification failed: {exc}")
             print_error("Configuration was NOT saved.")
             raise typer.Exit(code=1)
-        finally:
-            asyncio.run(rest.close())
     else:
         # GitHub App: cannot verify without building JWT; defer to first discover
         print_info("GitHub App credentials saved. Run 'gh-audit discover' to verify.")

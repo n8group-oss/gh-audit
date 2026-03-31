@@ -5,12 +5,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      publish_to_testpypi:
-        description: "Publish built Python artifacts to TestPyPI"
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -103,27 +97,6 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: dist/gh-audit*
           retention-days: 14
-
-  publish-testpypi:
-    name: Publish to TestPyPI
-    runs-on: ubuntu-latest
-    needs: [build-python]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_to_testpypi
-    permissions:
-      id-token: write
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/project/gh-audit/
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-dist
-          path: dist
-
-      - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
 
   publish-pypi:
     name: Publish to PyPI
@@ -227,6 +200,72 @@ jobs:
               release/*
           fi
 
+  preview-homebrew:
+    name: Preview Homebrew Formula
+    runs-on: ubuntu-latest
+    needs: [build-python, bundle-artifacts]
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release
+
+      - name: Compute SHA256 hashes
+        id: hashes
+        run: |
+          echo "linux_amd64=$(sha256sum release/gh-audit-linux-amd64.zip | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "macos_amd64=$(sha256sum release/gh-audit-macos-amd64.zip | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "macos_arm64=$(sha256sum release/gh-audit-macos-arm64.zip | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Generate formula preview
+        env:
+          VERSION: ${{ needs.build-python.outputs.version }}
+          REPO: ${{ github.repository }}
+          SHA_LINUX: ${{ steps.hashes.outputs.linux_amd64 }}
+          SHA_MACOS_AMD64: ${{ steps.hashes.outputs.macos_amd64 }}
+          SHA_MACOS_ARM64: ${{ steps.hashes.outputs.macos_arm64 }}
+        run: |
+          mkdir -p preview/Formula
+          cat > preview/Formula/gh-audit.rb <<EOF
+          # typed: false
+          # frozen_string_literal: true
+
+          class GhAudit < Formula
+            desc "GitHub audit, governance, and inventory for organizations"
+            homepage "https://n8-group.com"
+            version "${VERSION}"
+            license "BUSL-1.1"
+
+            if OS.mac? && Hardware::CPU.arm?
+              url "https://github.com/${REPO}/releases/download/v${VERSION}/gh-audit-macos-arm64.zip"
+              sha256 "${SHA_MACOS_ARM64}"
+            elsif OS.mac? && Hardware::CPU.intel?
+              url "https://github.com/${REPO}/releases/download/v${VERSION}/gh-audit-macos-amd64.zip"
+              sha256 "${SHA_MACOS_AMD64}"
+            elsif OS.linux?
+              url "https://github.com/${REPO}/releases/download/v${VERSION}/gh-audit-linux-amd64.zip"
+              sha256 "${SHA_LINUX}"
+            end
+
+            def install
+              bin.install "gh-audit"
+            end
+
+            test do
+              system "#{bin}/gh-audit", "--version"
+            end
+          end
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-preview
+          path: preview/Formula/gh-audit.rb
+          retention-days: 14
+
   update-homebrew:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
@@ -312,8 +351,55 @@ jobs:
           git diff --cached --quiet || git commit -m "Update gh-audit to ${{ needs.build-python.outputs.version }}"
           git push
 
+  preview-chocolatey:
+    name: Preview Chocolatey Package
+    runs-on: windows-latest
+    needs: [build-python, bundle-artifacts]
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release
+
+      - name: Compute SHA256
+        id: hash
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash release/gh-audit-windows-amd64.zip -Algorithm SHA256).Hash.ToLower()
+          "sha256=$hash" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Update install script and nuspec
+        shell: pwsh
+        run: |
+          $version = "${{ needs.build-python.outputs.version }}"
+          $sha = "${{ steps.hash.outputs.sha256 }}"
+
+          $install = Get-Content chocolatey/tools/chocolateyInstall.ps1 -Raw
+          $install = $install -replace "\`$checksum = '.*?'", "`$checksum = '$sha'"
+          Set-Content chocolatey/tools/chocolateyInstall.ps1 $install
+
+          [xml]$nuspec = Get-Content chocolatey/gh-audit.nuspec
+          $nuspec.package.metadata.version = $version
+          $nuspec.Save("$PWD/chocolatey/gh-audit.nuspec")
+
+      - name: Pack nupkg
+        shell: pwsh
+        run: |
+          choco pack chocolatey/gh-audit.nuspec --output-directory dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chocolatey-preview
+          path: dist/gh-audit.*.nupkg
+          retention-days: 14
+
   update-chocolatey:
-    name: Update Chocolatey Package
+    name: Publish Chocolatey Package
     runs-on: windows-latest
     needs: [build-python, create-release]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -321,6 +407,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Ensure Chocolatey API key is configured
+        shell: pwsh
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CHOCOLATEY_API_KEY)) {
+            Write-Error "CHOCOLATEY_API_KEY secret is required for the production release workflow."
+          }
 
       - name: Download Windows release asset
         env:
@@ -369,3 +464,11 @@ jobs:
             dist/gh-audit.*.nupkg \
             --repo "${GITHUB_REPOSITORY}" \
             --clobber
+
+      - name: Publish to Chocolatey Community Repository
+        shell: pwsh
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          choco apikey --key "$env:CHOCOLATEY_API_KEY" --source https://push.chocolatey.org/
+          choco push dist\gh-audit.*.nupkg --source https://push.chocolatey.org/

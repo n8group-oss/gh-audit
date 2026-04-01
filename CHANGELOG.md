@@ -4,6 +4,16 @@ All notable changes to `gh-audit` will be documented in this file.
 
 The public release history starts here.
 
+## v0.2.0 (2026-04-01)
+
+### Feat
+
+- professional Excel report styling for management presentations (#4)
+
+### Chore
+
+- add CODEOWNERS for mandatory owner approval (#2)
+
 ## v0.1.3 (2026-03-31)
 
 ### Fix

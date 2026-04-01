@@ -1,7 +1,7 @@
 name: Copilot Code Review
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
 
 permissions:
@@ -13,5 +13,4 @@ jobs:
     name: Copilot Review
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: github/copilot-code-review@v1

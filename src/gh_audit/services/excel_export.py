@@ -399,9 +399,7 @@ def _auto_fit_columns(
 
 def _style_data_cells(sheet: Worksheet, start_row: int = 2) -> None:
     """Apply font, border, and wrap alignment to all data cells."""
-    for row in sheet.iter_rows(
-        min_row=start_row, max_row=sheet.max_row, max_col=sheet.max_column
-    ):
+    for row in sheet.iter_rows(min_row=start_row, max_row=sheet.max_row, max_col=sheet.max_column):
         for cell in row:
             cell.font = _DATA_FONT
             cell.border = _THIN_BORDER
@@ -668,9 +666,7 @@ class ExcelExportService:
                         ws.cell(
                             row=env_row,
                             column=5,
-                            value=prot.branch_policy
-                            if prot and prot.branch_policy
-                            else "none",
+                            value=prot.branch_policy if prot and prot.branch_policy else "none",
                         )
                         ws.cell(
                             row=env_row,

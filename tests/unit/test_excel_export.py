@@ -543,11 +543,7 @@ class TestWarningsSheet:
 class TestSummarySheet:
     def _all_values(self, ws):
         """Collect all cell values across columns A-C (3-column summary layout)."""
-        return [
-            ws.cell(row, col).value
-            for row in range(1, ws.max_row + 1)
-            for col in range(1, 4)
-        ]
+        return [ws.cell(row, col).value for row in range(1, ws.max_row + 1) for col in range(1, 4)]
 
     def test_summary_has_org_name(self, tmp_path: Path) -> None:
         inv = _minimal_inventory(metadata=_metadata(organization="acme-corp"))

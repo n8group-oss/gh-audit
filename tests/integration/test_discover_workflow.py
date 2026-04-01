@@ -663,10 +663,10 @@ class TestReportGenerationIntegration:
 
         wb = load_workbook(str(xlsx_path), read_only=True)
         ws = wb["Summary"]
-        # Summary is now 3-column: Section | Key | Value
+        # Summary is 3-column: Section | Key | Value; data starts at row 6
         cell_values = {
             row[1]: row[2]
-            for row in ws.iter_rows(min_row=2, values_only=True)
+            for row in ws.iter_rows(min_row=6, values_only=True)
             if row[1] is not None and len(row) >= 3
         }
         assert cell_values.get("Organization") == _ORG

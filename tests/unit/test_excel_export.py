@@ -303,7 +303,9 @@ class TestActionsSheet:
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Actions"]
         # max_row is 2 because Excel tables require min 2 rows (header + blank)
-        assert ws.max_row <= 2
+        assert ws.max_row == 2
+        assert ws["A2"].value is None
+        assert ws["B2"].value is None
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +369,8 @@ class TestPackagesSheet:
         inv = _minimal_inventory(packages=[])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Packages"]
-        assert ws.max_row <= 2
+        assert ws.max_row == 2
+        assert ws["A2"].value is None
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +408,8 @@ class TestProjectsSheet:
         inv = _minimal_inventory(projects=[])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Projects"]
-        assert ws.max_row <= 2
+        assert ws.max_row == 2
+        assert ws["A2"].value is None
 
 
 # ---------------------------------------------------------------------------
@@ -474,7 +478,8 @@ class TestLargeFilesSheet:
         inv = _minimal_inventory(repositories=[repo])
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Large Files"]
-        assert ws.max_row <= 2
+        assert ws.max_row == 2
+        assert ws["A2"].value is None
 
     def test_multiple_large_files_produce_multiple_rows(self, tmp_path: Path) -> None:
         large_files = [
@@ -524,7 +529,8 @@ class TestWarningsSheet:
         inv = _minimal_inventory(metadata=_metadata(scan_warnings=[]))
         wb = load_workbook(_generate(inv, tmp_path))
         ws = wb["Warnings"]
-        assert ws.max_row <= 2
+        assert ws.max_row == 2
+        assert ws["A2"].value is None
 
     def test_multiple_repo_warnings(self, tmp_path: Path) -> None:
         repo = _minimal_repo("repo-w", warnings=["warn1", "warn2"])

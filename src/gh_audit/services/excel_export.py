@@ -60,8 +60,6 @@ _THIN_BORDER = Border(
     bottom=Side(style="thin", color="D9D9D9"),
 )
 
-_ALT_ROW_FILL = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
-
 _MIN_COL_WIDTH = 10
 _MAX_COL_WIDTH = 50
 
@@ -413,14 +411,6 @@ def _bold_first_column(sheet: Worksheet) -> None:
             row[0].font = _BOLD_DATA_FONT
 
 
-def _apply_alternating_rows(sheet: Worksheet, start_row: int = 3) -> None:
-    """Apply subtle alternating row shading to data rows."""
-    for row_idx in range(start_row, sheet.max_row + 1, 2):
-        for cell in sheet[row_idx]:
-            if cell.fill == PatternFill():  # only if not already coloured
-                cell.fill = _ALT_ROW_FILL
-
-
 def _apply_number_formatting(sheet: Worksheet) -> None:
     """Apply thousands separator to integer cells and 2-decimal to floats."""
     for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, max_col=sheet.max_column):
@@ -514,9 +504,6 @@ def _apply_formatting(wb: Workbook) -> None:
 
         # Style data cells (font, border, wrap)
         _style_data_cells(sheet)
-
-        # Alternating row shading
-        _apply_alternating_rows(sheet)
 
         # Bold first column (entity names)
         _bold_first_column(sheet)

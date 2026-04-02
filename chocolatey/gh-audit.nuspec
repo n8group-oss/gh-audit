@@ -3,14 +3,17 @@
   <metadata>
     <id>gh-audit</id>
     <version>0.1.0</version>
-    <title>gh-audit</title>
+    <title>gh-audit - GitHub Organization Audit and Governance Tool</title>
     <authors>N8 Group</authors>
     <owners>n8group</owners>
-    <projectUrl>https://n8-group.com</projectUrl>
+    <iconUrl>https://avatars.githubusercontent.com/u/256631336?v=4</iconUrl>
+    <projectUrl>https://github.com/n8group-oss/gh-audit</projectUrl>
     <projectSourceUrl>https://github.com/n8group-oss/gh-audit</projectSourceUrl>
+    <packageSourceUrl>https://github.com/n8group-oss/gh-audit/tree/main/chocolatey</packageSourceUrl>
     <bugTrackerUrl>https://github.com/n8group-oss/gh-audit/issues</bugTrackerUrl>
     <licenseUrl>https://github.com/n8group-oss/gh-audit/blob/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <releaseNotes>https://github.com/n8group-oss/gh-audit/blob/main/CHANGELOG.md</releaseNotes>
     <description>GitHub audit, governance, and inventory for organizations.
 
 gh-audit produces JSON inventory, HTML reports, and Excel workbooks
@@ -24,8 +27,7 @@ Features:
 - Excel workbook with 10 analysis sheets
 - GitHub Enterprise Server support
 
-A free tool by N8 Group - DevOps Transformation. Executed with Precision.
-https://n8-group.com | sales@n8-group.com</description>
+A free tool by N8 Group. Learn more at https://n8-group.com</description>
     <summary>GitHub audit, governance, and inventory tool by N8 Group</summary>
     <tags>github audit governance inventory devops security compliance</tags>
   </metadata>

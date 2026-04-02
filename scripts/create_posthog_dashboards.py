@@ -38,6 +38,11 @@ USAGE_DASHBOARD_DESC = "gh-audit adoption, discovery volumes, system metadata, a
 HEALTH_DASHBOARD_NAME = "gh-audit \u2014 Health & Errors"
 HEALTH_DASHBOARD_DESC = "Reliability, error tracking, crash reports, and performance monitoring"
 
+WARNINGS_DASHBOARD_NAME = "gh-audit \u2014 Warning Hotspots"
+WARNINGS_DASHBOARD_DESC = (
+    "Structured warning telemetry for discovery, reporting, and multi-org partial failures"
+)
+
 
 # ---------------------------------------------------------------------------
 # Insight definitions
@@ -89,6 +94,41 @@ def _query(
     return {"kind": "InsightVizNode", "source": source}
 
 
+def _event_display_name(event: str) -> str:
+    """Convert telemetry event names into compact chart labels."""
+    label = (
+        event.removesuffix("_warning")
+        .removesuffix("_completed")
+        .removesuffix("_failed")
+        .replace("multi_org", "multi-org")
+        .replace("_", " ")
+    )
+    return label.title()
+
+
+WARNING_EVENTS = [
+    "repo_enrichment_warning",
+    "org_discovery_warning",
+    "enterprise_discovery_warning",
+    "report_warning",
+    "multi_org_warning",
+]
+
+FAILURE_EVENTS = [
+    "discovery_failed",
+    "report_failed",
+    "assess_failed",
+    "multi_org_failed",
+]
+
+COMPLETION_EVENTS = [
+    "discovery_completed",
+    "report_completed",
+    "assess_completed",
+    "multi_org_completed",
+]
+
+
 # -- Usage & Adoption insights -----------------------------------------------
 
 USAGE_INSIGHTS: list[dict[str, object]] = [
@@ -121,6 +161,21 @@ USAGE_INSIGHTS: list[dict[str, object]] = [
         "name": "Auth Method Distribution",
         "description": "Scanner launches broken down by authentication method",
         "query": _query([_trend("scanner_launched")], breakdown_property="auth_method"),
+    },
+    {
+        "name": "Command Distribution",
+        "description": "Scanner launches broken down by command",
+        "query": _query([_trend("scanner_launched")], breakdown_property="command"),
+    },
+    {
+        "name": "Scan Profile Distribution",
+        "description": "Scanner launches broken down by scan profile",
+        "query": _query([_trend("scanner_launched")], breakdown_property="scan_profile"),
+    },
+    {
+        "name": "Active Category Distribution",
+        "description": "Scanner launches broken down by active categories",
+        "query": _query([_trend("scanner_launched")], breakdown_property="active_categories"),
     },
     {
         "name": "Discoveries Over Time",
@@ -158,6 +213,23 @@ USAGE_INSIGHTS: list[dict[str, object]] = [
         "name": "Reports Generated",
         "description": "Completed reports over time",
         "query": _query([_trend("report_completed")]),
+    },
+    {
+        "name": "Assessments Completed",
+        "description": "Completed assessments over time",
+        "query": _query([_trend("assess_completed")]),
+    },
+    {
+        "name": "Multi-Org Runs Completed",
+        "description": "Completed multi-org runs over time",
+        "query": _query([_trend("multi_org_completed")]),
+    },
+    {
+        "name": "Completed Commands by Type",
+        "description": "Completed discovery, report, assess, and multi-org commands",
+        "query": _query(
+            [_trend(event, custom_name=_event_display_name(event)) for event in COMPLETION_EVENTS]
+        ),
     },
 ]
 
@@ -202,6 +274,26 @@ HEALTH_INSIGHTS: list[dict[str, object]] = [
         "query": _query([_trend("report_failed")], breakdown_property="error_type"),
     },
     {
+        "name": "Assess Failures Over Time",
+        "description": "Assessment failures over time",
+        "query": _query([_trend("assess_failed")]),
+    },
+    {
+        "name": "Assess Errors by Type",
+        "description": "Assessment failures broken down by error_type",
+        "query": _query([_trend("assess_failed")], breakdown_property="error_type"),
+    },
+    {
+        "name": "Multi-Org Failures Over Time",
+        "description": "Multi-org execution failures over time",
+        "query": _query([_trend("multi_org_failed")]),
+    },
+    {
+        "name": "Multi-Org Errors by Type",
+        "description": "Multi-org failures broken down by error_type",
+        "query": _query([_trend("multi_org_failed")], breakdown_property="error_type"),
+    },
+    {
         "name": "Avg Discovery Duration",
         "description": "Average duration_seconds for completed discoveries",
         "query": _query(
@@ -231,10 +323,15 @@ HEALTH_INSIGHTS: list[dict[str, object]] = [
         "name": "All Errors Combined",
         "description": "Combined discovery and report failures over time",
         "query": _query(
-            [
-                _trend("discovery_failed", custom_name="Discovery Failures"),
-                _trend("report_failed", custom_name="Report Failures"),
-            ]
+            [_trend(event, custom_name=_event_display_name(event)) for event in FAILURE_EVENTS]
+        ),
+    },
+    {
+        "name": "Failures by Tool Version",
+        "description": "Failures broken down by tool_version",
+        "query": _query(
+            [_trend(event, custom_name=_event_display_name(event)) for event in FAILURE_EVENTS],
+            breakdown_property="tool_version",
         ),
     },
     {
@@ -246,6 +343,72 @@ HEALTH_INSIGHTS: list[dict[str, object]] = [
         "name": "Exceptions by Type",
         "description": "SDK-captured exceptions broken down by exception type",
         "query": _query([_trend("$exception")], breakdown_property="$exception_type"),
+    },
+]
+
+
+# -- Warning Hotspots insights ------------------------------------------------
+
+WARNING_INSIGHTS: list[dict[str, object]] = [
+    {
+        "name": "Warnings Over Time",
+        "description": "Structured warning events over time by warning family",
+        "query": _query(
+            [_trend(event, custom_name=_event_display_name(event)) for event in WARNING_EVENTS]
+        ),
+    },
+    {
+        "name": "Warnings by Scope",
+        "description": "Structured warnings broken down by warning scope",
+        "query": _query(
+            [_trend(event, custom_name=_event_display_name(event)) for event in WARNING_EVENTS],
+            breakdown_property="warning_scope",
+        ),
+    },
+    {
+        "name": "Warnings by Operation",
+        "description": "Structured warnings broken down by operation",
+        "query": _query(
+            [_trend(event, custom_name=_event_display_name(event)) for event in WARNING_EVENTS],
+            breakdown_property="operation",
+        ),
+    },
+    {
+        "name": "Warnings by Category",
+        "description": "Structured warnings broken down by category",
+        "query": _query(
+            [_trend(event, custom_name=_event_display_name(event)) for event in WARNING_EVENTS],
+            breakdown_property="category",
+        ),
+    },
+    {
+        "name": "Report Warnings Over Time",
+        "description": "Non-fatal report-generation warnings over time",
+        "query": _query([_trend("report_warning")]),
+    },
+    {
+        "name": "Multi-Org Warnings Over Time",
+        "description": "Per-organization warnings emitted during multi-org runs",
+        "query": _query([_trend("multi_org_warning")]),
+    },
+]
+
+
+DASHBOARDS: list[dict[str, object]] = [
+    {
+        "name": USAGE_DASHBOARD_NAME,
+        "description": USAGE_DASHBOARD_DESC,
+        "insights": USAGE_INSIGHTS,
+    },
+    {
+        "name": HEALTH_DASHBOARD_NAME,
+        "description": HEALTH_DASHBOARD_DESC,
+        "insights": HEALTH_INSIGHTS,
+    },
+    {
+        "name": WARNINGS_DASHBOARD_NAME,
+        "description": WARNINGS_DASHBOARD_DESC,
+        "insights": WARNING_INSIGHTS,
     },
 ]
 
@@ -339,32 +502,32 @@ def main() -> int:
     headers = {"Authorization": f"Bearer {api_key}"}
 
     with httpx.Client(headers=headers, timeout=30.0) as client:
-        dashboard_names = {USAGE_DASHBOARD_NAME, HEALTH_DASHBOARD_NAME}
+        dashboard_names = {dashboard["name"] for dashboard in DASHBOARDS}
 
         if args.recreate:
             print("Deleting existing dashboards...")
             _delete_dashboards_by_name(client, dashboard_names)
             print()
 
-        # -- Usage & Adoption -------------------------------------------------
-        print(f"Creating '{USAGE_DASHBOARD_NAME}'...")
-        usage_id = _create_dashboard(client, USAGE_DASHBOARD_NAME, USAGE_DASHBOARD_DESC)
-        for insight in USAGE_INSIGHTS:
-            _create_insight(client, usage_id, insight)
-        print(f"  -> {len(USAGE_INSIGHTS)} tiles created\n")
+        dashboard_urls: list[tuple[str, int]] = []
+        total = 0
+        for dashboard in DASHBOARDS:
+            print(f"Creating '{dashboard['name']}'...")
+            dashboard_id = _create_dashboard(
+                client,
+                str(dashboard["name"]),
+                str(dashboard["description"]),
+            )
+            insights = dashboard["insights"]
+            for insight in insights:
+                _create_insight(client, dashboard_id, insight)
+            print(f"  -> {len(insights)} tiles created\n")
+            dashboard_urls.append((str(dashboard["name"]), dashboard_id))
+            total += len(insights)
 
-        # -- Health & Errors --------------------------------------------------
-        print(f"Creating '{HEALTH_DASHBOARD_NAME}'...")
-        health_id = _create_dashboard(client, HEALTH_DASHBOARD_NAME, HEALTH_DASHBOARD_DESC)
-        for insight in HEALTH_INSIGHTS:
-            _create_insight(client, health_id, insight)
-        print(f"  -> {len(HEALTH_INSIGHTS)} tiles created\n")
-
-        # -- Summary ----------------------------------------------------------
-        total = len(USAGE_INSIGHTS) + len(HEALTH_INSIGHTS)
-        print(f"Done! 2 dashboards, {total} insight tiles.")
-        print(f"  Usage & Adoption: {POSTHOG_HOST}/project/{ENVIRONMENT_ID}/dashboard/{usage_id}")
-        print(f"  Health & Errors:  {POSTHOG_HOST}/project/{ENVIRONMENT_ID}/dashboard/{health_id}")
+        print(f"Done! {len(DASHBOARDS)} dashboards, {total} insight tiles.")
+        for name, dashboard_id in dashboard_urls:
+            print(f"  {name}: {POSTHOG_HOST}/project/{ENVIRONMENT_ID}/dashboard/{dashboard_id}")
 
     return 0
 

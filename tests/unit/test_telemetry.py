@@ -1,332 +1,292 @@
-"""Tests for gh_audit.services.telemetry — bounded PostHog telemetry."""
+"""Tests for gh_audit.services.telemetry."""
 
 from __future__ import annotations
 
 import hashlib
-import socket
-from unittest.mock import MagicMock
+import logging
+import threading
+from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
-import pytest
+if TYPE_CHECKING:
+    import pytest
 
 from gh_audit.services.telemetry import Telemetry
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+_PATCH_IMPORT = "gh_audit.services.telemetry._try_import_posthog"
 
 
-def _expected_distinct_id(org: str) -> str:
-    hostname = socket.gethostname()
-    raw = f"{org}|{hostname}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# Enabled / disabled logic
-# ---------------------------------------------------------------------------
-
-
-def test_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg")
-    assert t._enabled is True
-
-
-def test_disabled_via_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=False)
-    assert t._enabled is False
-
-
-def test_disabled_via_env_var_1(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "1")
-    t = Telemetry(organization="myorg", enabled=True)
-    assert t._enabled is False
-
-
-def test_disabled_via_env_var_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "true")
-    t = Telemetry(organization="myorg", enabled=True)
-    assert t._enabled is False
-
-
-def test_disabled_via_env_var_yes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "yes")
-    t = Telemetry(organization="myorg", enabled=True)
-    assert t._enabled is False
-
-
-def test_env_var_0_does_not_disable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "0")
-    t = Telemetry(organization="myorg", enabled=True)
-    assert t._enabled is True
-
-
-# ---------------------------------------------------------------------------
-# Distinct ID — SHA-256 of "org|hostname"
-# ---------------------------------------------------------------------------
-
-
-def test_distinct_id_is_64_char_hex(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg")
-    assert len(t._distinct_id) == 64
-    assert all(c in "0123456789abcdef" for c in t._distinct_id)
-
-
-def test_same_org_same_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t1 = Telemetry(organization="acme")
-    t2 = Telemetry(organization="acme")
-    assert t1._distinct_id == t2._distinct_id
-
-
-def test_different_org_different_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t1 = Telemetry(organization="orgA")
-    t2 = Telemetry(organization="orgB")
-    assert t1._distinct_id != t2._distinct_id
-
-
-def test_distinct_id_matches_expected_hash(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    org = "myorg"
-    t = Telemetry(organization=org)
-    assert t._distinct_id == _expected_distinct_id(org)
-
-
-# ---------------------------------------------------------------------------
-# Noop when disabled
-# ---------------------------------------------------------------------------
-
-
-def test_all_track_methods_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=False)
+def _make_mock_posthog() -> tuple[MagicMock, MagicMock]:
+    """Return a PostHog class mock and its client instance."""
+    mock_cls = MagicMock()
     mock_client = MagicMock()
-    t._client = mock_client
-
-    t.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
-    t.track_discovery_started()
-    t.track_discovery_completed(duration_seconds=1.5, repo_count=10)
-    t.track_discovery_failed(error_type="AuthError")
-    t.track_report_started(html=True, excel=False)
-    t.track_report_completed(html=True, excel=False)
-    t.track_report_failed(error_type="IOError")
-    t.capture_exception(ValueError("boom"))
-    t.shutdown()
-
-    mock_client.capture.assert_not_called()
-    mock_client.shutdown.assert_not_called()
+    mock_client.consumers = []
+    mock_client.exception_capture = None
+    mock_client.join = MagicMock()
+    mock_cls.return_value = mock_client
+    return mock_cls, mock_client
 
 
-# ---------------------------------------------------------------------------
-# Capture when enabled — using mock PostHog client
-# ---------------------------------------------------------------------------
+class TestTelemetry:
+    @patch(_PATCH_IMPORT)
+    def test_disabled_via_constructor(self, mock_import: MagicMock) -> None:
+        telemetry = Telemetry(organization="contoso", enabled=False)
+        telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+        mock_import.assert_not_called()
 
+    @patch(_PATCH_IMPORT)
+    def test_disabled_via_env(
+        self, mock_import: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GH_AUDIT_TELEMETRY_DISABLED", "1")
+        telemetry = Telemetry(organization="contoso")
+        telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+        mock_import.assert_not_called()
 
-def test_track_scanner_launched_captures_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+    @patch(_PATCH_IMPORT)
+    def test_enabled_by_default_creates_hardened_client(self, mock_import: MagicMock) -> None:
+        mock_cls, _ = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-    t.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+        telemetry = Telemetry(organization="contoso")
 
-    mock_client.capture.assert_called_once()
-    call_kwargs = mock_client.capture.call_args
-    # capture(distinct_id, event, properties)
-    args = call_kwargs[0] if call_kwargs[0] else []
-    kwargs = call_kwargs[1] if call_kwargs[1] else {}
-    all_args = {**kwargs}
-    if len(args) >= 1:
-        all_args.setdefault("distinct_id", args[0])
-    if len(args) >= 2:
-        all_args.setdefault("event", args[1])
-    if len(args) >= 3:
-        all_args.setdefault("properties", args[2])
+        assert telemetry._enabled is True
+        mock_cls.assert_called_once_with(
+            "phc_LvjlUfKx4Sm3edklc1sdLF2kcQCXsPehD08oHDw6RKj",
+            host="https://eu.i.posthog.com",
+            enable_exception_autocapture=True,
+        )
 
-    assert all_args.get("event") == "scanner_launched" or "scanner_launched" in str(call_kwargs)
+    @patch("gh_audit.services.telemetry.socket")
+    @patch(_PATCH_IMPORT)
+    def test_distinct_id_hashes_org_and_hostname(
+        self, mock_import: MagicMock, mock_socket: MagicMock
+    ) -> None:
+        mock_cls, _ = _make_mock_posthog()
+        mock_import.return_value = mock_cls
+        mock_socket.gethostname.return_value = "host-1"
 
+        telemetry = Telemetry(organization="contoso")
 
-def test_track_discovery_completed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+        assert telemetry._distinct_id == hashlib.sha256(b"contoso|host-1").hexdigest()
 
-    t.track_discovery_completed(
-        duration_seconds=5.0,
-        repo_count=42,
-        member_count=10,
-        package_count=3,
-        workflow_count=7,
-        issue_count=100,
-    )
+    @patch(_PATCH_IMPORT)
+    def test_track_scanner_launched_includes_system_metadata(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-    mock_client.capture.assert_called_once()
+        telemetry = Telemetry(organization="contoso")
+        telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
 
+        props = mock_client.capture.call_args.kwargs["properties"]
+        assert props["auth_method"] == "pat"
+        assert props["tool_version"] == "0.1.0"
+        assert props["organization"] == "contoso"
+        assert "run_id" in props
+        assert "os" in props
+        assert "python_version" in props
+        assert "cpu_architecture" in props
+        assert "os_version" in props
+        assert "is_tty" in props
+        assert "console_encoding" in props
 
-def test_track_discovery_started_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+    @patch(_PATCH_IMPORT)
+    def test_launch_context_is_bound_into_later_events(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-    t.track_discovery_started()
+        telemetry = Telemetry(organization="contoso")
+        telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+        telemetry.track_discovery_started(command="discover")
 
-    mock_client.capture.assert_called_once()
+        props = mock_client.capture.call_args.kwargs["properties"]
+        assert props["organization"] == "contoso"
+        assert props["auth_method"] == "pat"
+        assert props["tool_version"] == "0.1.0"
+        assert "os" in props
+        assert "python_version" in props
+        assert props["command"] == "discover"
 
+    @patch(_PATCH_IMPORT)
+    def test_discovery_failed_includes_stack_trace(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-def test_track_discovery_failed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+        telemetry = Telemetry(organization="contoso")
 
-    t.track_discovery_failed(error_type="NetworkError")
+        try:
+            raise ValueError("bad scan data")
+        except ValueError as exc:
+            telemetry.track_discovery_failed(error=exc, command="discover")
 
-    mock_client.capture.assert_called_once()
+        props = mock_client.capture.call_args.kwargs["properties"]
+        assert props["error_type"] == "ValueError"
+        assert props["error_message"] == "bad scan data"
+        assert "stack_trace" in props
+        assert "ValueError" in props["stack_trace"]
+        assert props["command"] == "discover"
 
+    @patch(_PATCH_IMPORT)
+    def test_track_warning_includes_full_error_context(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-def test_track_report_started_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+        telemetry = Telemetry(organization="contoso")
 
-    t.track_report_started(html=True, excel=True)
+        try:
+            raise RuntimeError("workflow fetch failed")
+        except RuntimeError as exc:
+            telemetry.track_warning(
+                "repo_enrichment_warning",
+                error=exc,
+                command="discover",
+                operation="workflow_list",
+                category="operations",
+                repo="repo-1",
+                warning_scope="repo",
+            )
 
-    mock_client.capture.assert_called_once()
+        assert mock_client.capture.call_args.kwargs["event"] == "repo_enrichment_warning"
+        props = mock_client.capture.call_args.kwargs["properties"]
+        assert props["warning_scope"] == "repo"
+        assert props["operation"] == "workflow_list"
+        assert props["category"] == "operations"
+        assert props["repo"] == "repo-1"
+        assert props["error_type"] == "RuntimeError"
+        assert "stack_trace" in props
 
+    @patch(_PATCH_IMPORT)
+    def test_track_warning_supports_non_exception_warning(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-def test_track_report_completed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+        telemetry = Telemetry(organization="contoso")
+        telemetry.track_warning(
+            "enterprise_discovery_warning",
+            command="discover",
+            operation="enterprise_info",
+            category="enterprise",
+            warning_scope="enterprise",
+            warning_message="Enterprise info not accessible (check permissions)",
+        )
 
-    t.track_report_completed(html=False, excel=True)
+        assert mock_client.capture.call_args.kwargs["event"] == "enterprise_discovery_warning"
+        props = mock_client.capture.call_args.kwargs["properties"]
+        assert props["warning_message"] == "Enterprise info not accessible (check permissions)"
+        assert props["warning_scope"] == "enterprise"
+        assert props["operation"] == "enterprise_info"
+        assert "error_type" not in props
 
-    mock_client.capture.assert_called_once()
+    @patch(_PATCH_IMPORT)
+    def test_capture_exception_delegates_to_native_sdk_path(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
+        telemetry = Telemetry(organization="contoso")
+        exc = RuntimeError("boom")
 
-def test_track_report_failed_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+        telemetry.capture_exception(exc)
 
-    t.track_report_failed(error_type="PermissionError")
+        mock_client.capture_exception.assert_called_once()
+        call_args = mock_client.capture_exception.call_args
+        assert call_args.args[0] is exc
+        assert call_args.kwargs["distinct_id"] == telemetry._distinct_id
+        props = call_args.kwargs["properties"]
+        assert props["organization"] == "contoso"
+        assert "run_id" in props
+        assert "os" in props
+        assert "python_version" in props
 
-    mock_client.capture.assert_called_once()
+    @patch(_PATCH_IMPORT)
+    def test_capture_exception_swallows_client_errors(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_client.capture_exception.side_effect = RuntimeError("network")
+        mock_import.return_value = mock_cls
 
+        telemetry = Telemetry(organization="contoso")
+        telemetry.capture_exception(RuntimeError("boom"))
 
-def test_capture_exception_sends_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+    @patch(_PATCH_IMPORT)
+    def test_shutdown_pauses_consumers_with_timeout(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        consumer_1 = MagicMock()
+        consumer_2 = MagicMock()
+        mock_client.consumers = [consumer_1, consumer_2]
+        mock_import.return_value = mock_cls
 
-    t.capture_exception(RuntimeError("oops"))
+        telemetry = Telemetry(organization="contoso")
+        telemetry.shutdown()
 
-    mock_client.capture.assert_called_once()
+        consumer_1.pause.assert_called_once()
+        consumer_2.pause.assert_called_once()
+        consumer_1.join.assert_called_once()
+        consumer_2.join.assert_called_once()
+        assert consumer_1.join.call_args.kwargs["timeout"] == 2.0
+        assert consumer_2.join.call_args.kwargs["timeout"] == 2.0
+        mock_client.shutdown.assert_not_called()
+        mock_client.flush.assert_not_called()
 
+    @patch(_PATCH_IMPORT)
+    def test_constructor_unregisters_atexit_handler(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-# ---------------------------------------------------------------------------
-# Never raise — resilience tests
-# ---------------------------------------------------------------------------
+        with patch("gh_audit.services.telemetry.atexit") as mock_atexit:
+            Telemetry(organization="contoso")
+            mock_atexit.unregister.assert_called_once_with(mock_client.join)
 
+    @patch(_PATCH_IMPORT)
+    def test_constructor_silences_posthog_loggers(self, mock_import: MagicMock) -> None:
+        mock_cls, _ = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-def test_never_raises_with_none_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    t._client = None  # simulate broken/missing client
+        Telemetry(organization="contoso")
 
-    # None of these should raise
-    t.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
-    t.track_discovery_started()
-    t.track_discovery_completed(duration_seconds=1.0, repo_count=5)
-    t.track_discovery_failed(error_type="Timeout")
-    t.track_report_started(html=True, excel=False)
-    t.track_report_completed(html=True, excel=False)
-    t.track_report_failed(error_type="IOError")
-    t.capture_exception(ValueError("broken"))
-    t.shutdown()
+        assert logging.getLogger("posthog").level > logging.CRITICAL
+        assert logging.getLogger("urllib3.connectionpool").level > logging.CRITICAL
 
+    @patch(_PATCH_IMPORT)
+    def test_shutdown_restores_threading_excepthook(self, mock_import: MagicMock) -> None:
+        mock_cls, _ = _make_mock_posthog()
+        mock_import.return_value = mock_cls
 
-def test_never_raises_with_broken_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
+        original_hook = threading.excepthook
+        telemetry = Telemetry(organization="contoso")
+        threading.excepthook = lambda args: None  # type: ignore[assignment]
 
-    broken_client = MagicMock()
-    broken_client.capture.side_effect = RuntimeError("PostHog network failure")
-    broken_client.shutdown.side_effect = RuntimeError("shutdown failure")
-    t._client = broken_client
+        telemetry.shutdown()
 
-    t.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
-    t.track_discovery_started()
-    t.track_discovery_completed(duration_seconds=2.0, repo_count=0)
-    t.track_discovery_failed(error_type="AuthError")
-    t.track_report_started(html=False, excel=True)
-    t.track_report_completed(html=False, excel=True)
-    t.track_report_failed(error_type="ValueError")
-    t.capture_exception(Exception("anything"))
-    t.shutdown()
+        assert threading.excepthook is original_hook
 
+    @patch(_PATCH_IMPORT)
+    def test_shutdown_closes_exception_capture(self, mock_import: MagicMock) -> None:
+        mock_cls, mock_client = _make_mock_posthog()
+        mock_exception_capture = MagicMock()
+        mock_client.exception_capture = mock_exception_capture
+        mock_import.return_value = mock_cls
 
-def test_shutdown_safe_with_none_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    t._client = None
-    t.shutdown()  # must not raise
+        telemetry = Telemetry(organization="contoso")
+        telemetry.shutdown()
 
+        mock_exception_capture.close.assert_called_once()
 
-def test_shutdown_calls_client_shutdown_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    t = Telemetry(organization="myorg", enabled=True)
-    mock_client = MagicMock()
-    t._client = mock_client
+    def test_posthog_import_failure_degrades_gracefully(self) -> None:
+        with patch(_PATCH_IMPORT, return_value=None):
+            telemetry = Telemetry(organization="contoso")
+            assert telemetry._enabled is False
+            assert telemetry._client is None
+            telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+            telemetry.capture_exception(RuntimeError("boom"))
+            telemetry.shutdown()
 
-    t.shutdown()
+    @patch(_PATCH_IMPORT)
+    def test_constructor_failure_degrades_gracefully(self, mock_import: MagicMock) -> None:
+        mock_cls = MagicMock()
+        mock_cls.side_effect = RuntimeError("SSL certificate verify failed")
+        mock_import.return_value = mock_cls
 
-    mock_client.shutdown.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# PostHog import missing — simulated via patching
-# ---------------------------------------------------------------------------
-
-
-def test_graceful_when_posthog_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Telemetry should silently become a no-op if PostHog is not installed."""
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-
-    # Patch the module-level Posthog name to None (simulating ImportError path)
-    import gh_audit.services.telemetry as telemetry_mod
-
-    original = telemetry_mod.Posthog
-    try:
-        telemetry_mod.Posthog = None  # type: ignore[attr-defined]
-        t = Telemetry(organization="myorg", enabled=True)
-        assert t._client is None
-        # All methods must be safe
-        t.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
-        t.track_discovery_started()
-        t.track_discovery_completed(duration_seconds=0.5, repo_count=1)
-        t.shutdown()
-    finally:
-        telemetry_mod.Posthog = original  # type: ignore[attr-defined]
-
-
-# ---------------------------------------------------------------------------
-# Minimal smoke test matching task description
-# ---------------------------------------------------------------------------
-
-
-def test_task_description_example(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GH_AUDIT_TELEMETRY_DISABLED", raising=False)
-    telemetry = Telemetry(organization="myorg", enabled=True)
-    # This must not raise regardless of PostHog availability
-    telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+        telemetry = Telemetry(organization="contoso")
+        assert telemetry._client is None
+        telemetry.track_scanner_launched(auth_method="pat", tool_version="0.1.0")
+        telemetry.capture_exception(RuntimeError("boom"))
+        telemetry.shutdown()

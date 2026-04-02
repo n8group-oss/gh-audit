@@ -110,10 +110,47 @@ class DiscoveryService:
         rest_client,
         graphql_client,
         config: ScannerConfig,
+        telemetry=None,
     ) -> None:
         self._rest = rest_client
         self._gql = graphql_client
         self._config = config
+        self._telemetry = telemetry
+
+    def _record_warning(
+        self,
+        warnings: list[str],
+        message: str,
+        *,
+        event: str,
+        operation: str,
+        category: str | None,
+        organization: str | None = None,
+        repo: str | None = None,
+        error: BaseException | None = None,
+        **properties,
+    ) -> None:
+        """Append a human-readable warning and emit structured telemetry."""
+        warnings.append(message)
+
+        if self._telemetry is None:
+            return
+
+        payload = dict(properties)
+        if error is None:
+            payload["warning_message"] = message
+
+        self._telemetry.track_warning(
+            event,
+            error=error,
+            command="discover",
+            operation=operation,
+            category=category,
+            organization=organization or self._config.organization,
+            repo=repo,
+            warning_scope=event.removesuffix("_warning"),
+            **payload,
+        )
 
     async def discover(self) -> Inventory:
         """Execute the full discovery flow and return a complete Inventory."""
@@ -368,7 +405,16 @@ class DiscoveryService:
             )
         except Exception as exc:
             _log.warning("Failed to list workflows for %s/%s: %s", org, repo, exc)
-            warnings.append(f"Failed to list workflows: {exc}")
+            self._record_warning(
+                warnings,
+                f"Failed to list workflows: {exc}",
+                event="repo_enrichment_warning",
+                operation="list_workflows",
+                category="actions",
+                organization=org,
+                repo=repo,
+                error=exc,
+            )
 
     async def _enrich_workflow_contents(
         self,
@@ -416,13 +462,30 @@ class DiscoveryService:
             if rulesets is None:
                 # Forbidden
                 item.branch_protection.ruleset_count = None
-                warnings.append(f"Rulesets not accessible for {org}/{repo}")
+                self._record_warning(
+                    warnings,
+                    f"Rulesets not accessible for {org}/{repo}",
+                    event="repo_enrichment_warning",
+                    operation="list_rulesets",
+                    category="governance",
+                    organization=org,
+                    repo=repo,
+                )
             else:
                 item.branch_protection.ruleset_count = len(rulesets)
         except Exception as exc:
             _log.warning("Failed to list rulesets for %s/%s: %s", org, repo, exc)
             item.branch_protection.ruleset_count = None
-            warnings.append(f"Failed to list rulesets: {exc}")
+            self._record_warning(
+                warnings,
+                f"Failed to list rulesets: {exc}",
+                event="repo_enrichment_warning",
+                operation="list_rulesets",
+                category="governance",
+                organization=org,
+                repo=repo,
+                error=exc,
+            )
 
     async def _enrich_security_features(
         self,
@@ -451,7 +514,16 @@ class DiscoveryService:
             )
         except Exception as exc:
             _log.warning("Failed to get security features for %s/%s: %s", org, repo, exc)
-            warnings.append(f"Failed to get security features: {exc}")
+            self._record_warning(
+                warnings,
+                f"Failed to get security features: {exc}",
+                event="repo_enrichment_warning",
+                operation="get_security_features",
+                category="security",
+                organization=org,
+                repo=repo,
+                error=exc,
+            )
 
     async def _enrich_large_files(
         self,
@@ -538,7 +610,15 @@ class DiscoveryService:
             )
         except Exception as exc:
             _log.warning("Failed to discover users for %s: %s", org, exc)
-            scan_warnings.append(f"Failed to discover org members: {exc}")
+            self._record_warning(
+                scan_warnings,
+                f"Failed to discover org members: {exc}",
+                event="org_discovery_warning",
+                operation="list_org_members",
+                category="users",
+                organization=org,
+                error=exc,
+            )
             return OrgMemberSummary()
 
     async def _discover_packages(self, org: str, scan_warnings: list[str]) -> list[PackageInfo]:
@@ -558,7 +638,16 @@ class DiscoveryService:
                     )
             except Exception as exc:
                 _log.warning("Failed to list %s packages for %s: %s", pkg_type, org, exc)
-                scan_warnings.append(f"Failed to list {pkg_type} packages: {exc}")
+                self._record_warning(
+                    scan_warnings,
+                    f"Failed to list {pkg_type} packages: {exc}",
+                    event="org_discovery_warning",
+                    operation="list_packages",
+                    category="packages",
+                    organization=org,
+                    error=exc,
+                    package_type=pkg_type,
+                )
 
         return all_packages
 
@@ -576,7 +665,15 @@ class DiscoveryService:
             ]
         except Exception as exc:
             _log.warning("Failed to discover projects for %s: %s", org, exc)
-            scan_warnings.append(f"Failed to discover projects: {exc}")
+            self._record_warning(
+                scan_warnings,
+                f"Failed to discover projects: {exc}",
+                event="org_discovery_warning",
+                operation="fetch_projects",
+                category="projects",
+                organization=org,
+                error=exc,
+            )
             return []
 
     # ------------------------------------------------------------------
@@ -657,7 +754,15 @@ class DiscoveryService:
                 web_commit_signoff_required=org_data.get("web_commit_signoff_required"),
             )
         except Exception as exc:
-            scan_warnings.append(f"Org policies discovery failed: {exc}")
+            self._record_warning(
+                scan_warnings,
+                f"Org policies discovery failed: {exc}",
+                event="org_discovery_warning",
+                operation="verify_credentials",
+                category="governance",
+                organization=org,
+                error=exc,
+            )
 
         # Custom roles (may 403 on non-Enterprise)
         custom_roles: list[CustomRoleInfo] = []
@@ -977,9 +1082,18 @@ class DiscoveryService:
                         )
                     else:
                         repo.actions_permissions = ActionsPermissions()
-                except Exception:
+                except Exception as exc:
                     repo.actions_permissions = ActionsPermissions()
-                    repo.warnings.append("Actions permissions fetch failed")
+                    self._record_warning(
+                        repo.warnings,
+                        "Actions permissions fetch failed",
+                        event="repo_enrichment_warning",
+                        operation="get_repo_actions_permissions",
+                        category="operations",
+                        organization=org,
+                        repo=name,
+                        error=exc,
+                    )
 
         await asyncio.gather(*[_enrich_one(r) for r in repos])
 
@@ -1102,8 +1216,17 @@ class DiscoveryService:
                             default_setup_enabled=raw_setup.get("state", "") == "configured",
                             languages=raw_setup.get("languages", []),
                         )
-                except Exception:
-                    repo.warnings.append("Code scanning setup fetch failed")
+                except Exception as exc:
+                    self._record_warning(
+                        repo.warnings,
+                        "Code scanning setup fetch failed",
+                        event="repo_enrichment_warning",
+                        operation="get_code_scanning_default_setup",
+                        category="security",
+                        organization=org,
+                        repo=name,
+                        error=exc,
+                    )
 
                 # Security configuration
                 security_config_name: str | None = None
@@ -1318,11 +1441,26 @@ class DiscoveryService:
         try:
             info = await self._gql.fetch_enterprise_info(slug)
         except Exception as exc:
-            scan_warnings.append(f"Enterprise info discovery failed: {exc}")
+            self._record_warning(
+                scan_warnings,
+                f"Enterprise info discovery failed: {exc}",
+                event="enterprise_discovery_warning",
+                operation="fetch_enterprise_info",
+                category="enterprise",
+                error=exc,
+                enterprise_slug=slug,
+            )
             return None
 
         if info is None:
-            scan_warnings.append("Enterprise info not accessible (check permissions)")
+            self._record_warning(
+                scan_warnings,
+                "Enterprise info not accessible (check permissions)",
+                event="enterprise_discovery_warning",
+                operation="fetch_enterprise_info",
+                category="enterprise",
+                enterprise_slug=slug,
+            )
             return None
 
         # SAML
@@ -1355,7 +1493,15 @@ class DiscoveryService:
                     storage_quota_gb=billing_raw.get("storage_quota_gb", 0.0),
                 )
         except Exception as exc:
-            scan_warnings.append(f"Enterprise billing discovery failed: {exc}")
+            self._record_warning(
+                scan_warnings,
+                f"Enterprise billing discovery failed: {exc}",
+                event="enterprise_discovery_warning",
+                operation="fetch_enterprise_billing",
+                category="enterprise",
+                error=exc,
+                enterprise_slug=slug,
+            )
 
         # Policies (separate query, may fail independently)
         policies: EnterprisePolicies | None = None
@@ -1364,7 +1510,15 @@ class DiscoveryService:
             if policies_raw is not None:
                 policies = EnterprisePolicies(**policies_raw)
         except Exception as exc:
-            scan_warnings.append(f"Enterprise policies discovery failed: {exc}")
+            self._record_warning(
+                scan_warnings,
+                f"Enterprise policies discovery failed: {exc}",
+                event="enterprise_discovery_warning",
+                operation="fetch_enterprise_policies",
+                category="enterprise",
+                error=exc,
+                enterprise_slug=slug,
+            )
 
         return EnterpriseInventory(
             name=info["name"],

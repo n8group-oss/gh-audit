@@ -616,3 +616,116 @@ class TestRunAllOrgs:
         assert _call_kwargs is not None
         cli_overrides_arg = _call_kwargs.args[2]
         assert cli_overrides_arg.get("api_url") == "https://github.example.com/api/v3"
+
+    @pytest.mark.asyncio
+    async def test_passes_telemetry_to_discovery_service(
+        self, tmp_path, mock_clients, mock_reports
+    ):
+        telemetry = MagicMock()
+
+        with (
+            patch(
+                "gh_audit.services.multi_org.Telemetry", return_value=telemetry
+            ) as mock_telemetry,
+            patch("gh_audit.services.multi_org.DiscoveryService") as mock_discovery,
+        ):
+            mock_discovery.return_value.discover = AsyncMock(return_value=_make_inventory("org-a"))
+            config = MultiOrgConfig(organizations=[{"name": "org-a", "token": "ghp_aaa"}])
+
+            await run_all_orgs(
+                config,
+                config_path=Path("config.yml"),
+                output_dir=tmp_path,
+            )
+
+        mock_telemetry.assert_called_once_with(organization="multi-org", enabled=True)
+        telemetry.track_scanner_launched.assert_called_once()
+        assert telemetry.bind_context.call_args is not None
+        assert telemetry.bind_context.call_args.kwargs["command"] == "multi_org"
+        assert telemetry.bind_context.call_args.kwargs["multi_org"] is True
+        assert mock_discovery.call_args is not None
+        assert mock_discovery.call_args.kwargs["telemetry"] is telemetry
+        telemetry.track_multi_org_started.assert_called_once()
+        telemetry.track_multi_org_completed.assert_called_once()
+        telemetry.shutdown.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_multi_org_completed_emits_aggregate_totals(
+        self, tmp_path, mock_clients, mock_reports
+    ):
+        telemetry = MagicMock()
+
+        with (
+            patch("gh_audit.services.multi_org.Telemetry", return_value=telemetry),
+            patch("gh_audit.services.multi_org.DiscoveryService") as mock_discovery,
+        ):
+            mock_discovery.return_value.discover = AsyncMock(
+                side_effect=[
+                    _make_inventory("org-a"),
+                    _make_inventory("org-b"),
+                ]
+            )
+            config = MultiOrgConfig(
+                organizations=[
+                    {"name": "org-a", "token": "ghp_aaa"},
+                    {"name": "org-b", "token": "ghp_bbb"},
+                ]
+            )
+
+            await run_all_orgs(
+                config,
+                config_path=Path("config.yml"),
+                output_dir=tmp_path,
+            )
+
+        telemetry.track_multi_org_completed.assert_called_once()
+        completed_kwargs = telemetry.track_multi_org_completed.call_args.kwargs
+        assert completed_kwargs["command"] == "multi_org"
+        assert completed_kwargs["organizations_scanned"] == 2
+        assert completed_kwargs["organizations_succeeded"] == 2
+        assert completed_kwargs["organizations_failed"] == 0
+        assert completed_kwargs["warning_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_failed_org_emits_multi_org_warning_without_aborting(
+        self, tmp_path, mock_clients, mock_reports
+    ):
+        telemetry = MagicMock()
+        error = RuntimeError("API down")
+
+        with (
+            patch("gh_audit.services.multi_org.Telemetry", return_value=telemetry),
+            patch("gh_audit.services.multi_org.DiscoveryService") as mock_discovery,
+        ):
+            mock_discovery.return_value.discover = AsyncMock(
+                side_effect=[
+                    error,
+                    _make_inventory("org-b"),
+                ]
+            )
+            config = MultiOrgConfig(
+                organizations=[
+                    {"name": "org-a", "token": "ghp_aaa"},
+                    {"name": "org-b", "token": "ghp_bbb"},
+                ]
+            )
+
+            summary = await run_all_orgs(
+                config,
+                config_path=Path("config.yml"),
+                output_dir=tmp_path,
+            )
+
+        assert [result.status for result in summary.organizations] == ["failed", "success"]
+        telemetry.track_warning.assert_called_once_with(
+            "multi_org_warning",
+            error=error,
+            command="multi_org",
+            operation="scan_organization",
+            organization="org-a",
+            warning_scope="multi_org",
+        )
+        telemetry.track_multi_org_completed.assert_called_once()
+        completed_kwargs = telemetry.track_multi_org_completed.call_args.kwargs
+        assert completed_kwargs["organizations_failed"] == 1
+        assert completed_kwargs["organizations_succeeded"] == 1

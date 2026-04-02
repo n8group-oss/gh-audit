@@ -5,6 +5,7 @@ Uses typer.testing.CliRunner to exercise commands without spawning subprocesses.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -48,6 +49,26 @@ class TestInitCommand:
         result = runner.invoke(app, ["init", "--help"])
         assert result.exit_code == 0
         assert "init" in result.stdout.lower() or "credential" in result.stdout.lower()
+
+    @patch("gh_audit.adapters.github_rest.GitHubRestClient")
+    def test_init_pat_writes_gh_audit_env_names(self, mock_rest_cls):
+        mock_rest = MagicMock()
+        mock_rest.verify_credentials = AsyncMock(return_value={"login": "test-org"})
+        mock_rest.close = AsyncMock()
+        mock_rest_cls.return_value = mock_rest
+
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                app,
+                ["init"],
+                input="2\nghp_test123\ntest-org\n",
+            )
+
+            assert result.exit_code == 0, result.stdout
+            env_text = Path(".env").read_text(encoding="utf-8")
+        assert "GH_AUDIT_TOKEN=ghp_test123" in env_text
+        assert "GH_AUDIT_ORGANIZATION=test-org" in env_text
+        assert "GH_SCANNER_TOKEN" not in env_text
 
 
 # ---------------------------------------------------------------------------

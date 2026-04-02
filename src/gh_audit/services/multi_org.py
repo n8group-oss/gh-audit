@@ -35,6 +35,7 @@ from gh_audit.models.multi_org import (
 from gh_audit.services.discovery import DiscoveryService
 from gh_audit.services.excel_export import ExcelExportService
 from gh_audit.services.reporting import ReportService
+from gh_audit.services.telemetry import Telemetry
 
 # ---------------------------------------------------------------------------
 # Environment variable expansion
@@ -231,65 +232,118 @@ async def run_all_orgs(
 
     total = len(config.organizations)
     results: list[OrgScanResult] = []
-
-    for idx, org_entry in enumerate(config.organizations, start=1):
-        org_name = org_entry.name
-        print_info(f"[{idx}/{total}] {org_name}")
-
-        t0 = time.monotonic()
-        try:
-            settings = build_scanner_config(org_entry, config.defaults, overrides)
-
-            # Build clients
-            rest_client, gql_client = _build_clients(settings)
-            try:
-                # Verify credentials
-                await rest_client.verify_credentials(org_name)
-
-                # Run discovery
-                svc = DiscoveryService(
-                    rest_client=rest_client,
-                    graphql_client=gql_client,
-                    config=settings,
-                )
-                inventory = await svc.discover()
-
-                # Write outputs
-                org_dir = output_dir / org_name
-                org_dir.mkdir(parents=True, exist_ok=True)
-
-                date_prefix = date.today().isoformat()
-                _save_inventory_json(inventory, org_dir / f"{date_prefix}-inventory.json")
-
-                if generate_html:
-                    ReportService().generate(inventory, org_dir / f"{org_name}-report.html")
-
-                if generate_excel:
-                    ExcelExportService.generate(inventory, org_dir / f"{org_name}-inventory.xlsx")
-
-                duration = time.monotonic() - t0
-                result = _build_success_result(org_name, settings, inventory, duration)
-            finally:
-                await rest_client.close()
-                await gql_client.close()
-
-        except Exception as exc:
-            duration = time.monotonic() - t0
-            print_error(f"{org_name}: {exc}")
-            result = OrgScanResult(
-                name=org_name,
-                status="failed",
-                error=str(exc),
-                duration_seconds=round(duration, 2),
-            )
-
-        results.append(result)
-
-    return MultiOrgSummary(
-        tool_version=__version__,
-        config_file=str(config_path),
-        organizations=results,
+    aggregate_t0 = time.monotonic()
+    telemetry = Telemetry(
+        organization="multi-org",
+        enabled=not no_telemetry,
     )
+    telemetry.bind_context(
+        command="multi_org",
+        multi_org=True,
+        config_file=str(config_path),
+        organization_count=total,
+        generate_html=generate_html,
+        generate_excel=generate_excel,
+    )
+    telemetry.track_scanner_launched(
+        auth_method=_multi_org_auth_method(config),
+        tool_version=__version__,
+    )
+    telemetry.track_multi_org_started(
+        command="multi_org",
+        organizations_total=total,
+    )
+
+    try:
+        for idx, org_entry in enumerate(config.organizations, start=1):
+            org_name = org_entry.name
+            print_info(f"[{idx}/{total}] {org_name}")
+
+            t0 = time.monotonic()
+            try:
+                settings = build_scanner_config(org_entry, config.defaults, overrides)
+
+                # Build clients
+                rest_client, gql_client = _build_clients(settings)
+                try:
+                    # Verify credentials
+                    await rest_client.verify_credentials(org_name)
+
+                    # Run discovery
+                    svc = DiscoveryService(
+                        rest_client=rest_client,
+                        graphql_client=gql_client,
+                        config=settings,
+                        telemetry=telemetry,
+                    )
+                    inventory = await svc.discover()
+
+                    # Write outputs
+                    org_dir = output_dir / org_name
+                    org_dir.mkdir(parents=True, exist_ok=True)
+
+                    date_prefix = date.today().isoformat()
+                    _save_inventory_json(inventory, org_dir / f"{date_prefix}-inventory.json")
+
+                    if generate_html:
+                        ReportService().generate(inventory, org_dir / f"{org_name}-report.html")
+
+                    if generate_excel:
+                        ExcelExportService.generate(
+                            inventory, org_dir / f"{org_name}-inventory.xlsx"
+                        )
+
+                    duration = time.monotonic() - t0
+                    result = _build_success_result(org_name, settings, inventory, duration)
+                finally:
+                    await rest_client.close()
+                    await gql_client.close()
+
+            except Exception as exc:
+                duration = time.monotonic() - t0
+                print_error(f"{org_name}: {exc}")
+                telemetry.track_warning(
+                    "multi_org_warning",
+                    error=exc,
+                    command="multi_org",
+                    operation="scan_organization",
+                    organization=org_name,
+                    warning_scope="multi_org",
+                )
+                result = OrgScanResult(
+                    name=org_name,
+                    status="failed",
+                    error=str(exc),
+                    duration_seconds=round(duration, 2),
+                )
+
+            results.append(result)
+
+        summary = MultiOrgSummary(
+            tool_version=__version__,
+            config_file=str(config_path),
+            organizations=results,
+        )
+        totals = summary.totals
+        telemetry.track_multi_org_completed(
+            command="multi_org",
+            organizations_scanned=totals.organizations_scanned,
+            organizations_succeeded=totals.organizations_succeeded,
+            organizations_failed=totals.organizations_failed,
+            warning_count=sum(result.warnings_count for result in results),
+            duration_seconds=round(time.monotonic() - aggregate_t0, 2),
+        )
+        return summary
+    except Exception as exc:
+        telemetry.track_multi_org_failed(
+            error=exc,
+            command="multi_org",
+            organizations_total=total,
+        )
+        telemetry.capture_exception(exc)
+        raise
+    finally:
+        telemetry.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +370,14 @@ def _build_clients(
         gql = GitHubGraphQLClient(token=token, graphql_url=settings.graphql_url)
 
     return rest, gql
+
+
+def _multi_org_auth_method(config: MultiOrgConfig) -> str:
+    """Return a representative auth method for a multi-org run."""
+    methods = {"pat" if org.token is not None else "github_app" for org in config.organizations}
+    if len(methods) == 1:
+        return methods.pop()
+    return "mixed"
 
 
 def _save_inventory_json(inventory: Inventory, path: Path) -> None:

@@ -105,6 +105,36 @@ def _configure_logging(
     )
 
 
+def _start_command_telemetry(
+    *,
+    command: str,
+    organization: str,
+    enabled: bool,
+    auth_method: str,
+    tool_version: str,
+    scan_profile: str | None = None,
+    api_url: str | None = None,
+    active_categories: list[str] | None = None,
+    enterprise_slug: str | None = None,
+):
+    """Create telemetry, bind run context, and emit the launch event."""
+    from gh_audit.services.telemetry import Telemetry
+
+    telemetry = Telemetry(organization=organization, enabled=enabled)
+    telemetry.bind_context(
+        command=command,
+        scan_profile=scan_profile,
+        api_url=api_url,
+        active_categories=list(active_categories or []),
+        enterprise_slug=enterprise_slug,
+    )
+    telemetry.track_scanner_launched(
+        auth_method=auth_method,
+        tool_version=tool_version,
+    )
+    return telemetry
+
+
 # ---------------------------------------------------------------------------
 # init command
 # ---------------------------------------------------------------------------
@@ -147,24 +177,17 @@ def init() -> None:
     # Verify credentials before writing .env
     if choice == "2":
         # PAT: verify via API
-
-        async def _verify_pat() -> dict:
-            rest = GitHubRestClient(token=token, base_url="https://api.github.com")
-            try:
-                return await rest.verify_credentials(organization)
-            finally:
-                await rest.close()
-
+        rest = GitHubRestClient(token=token, base_url="https://api.github.com")
         try:
-            result = asyncio.run(_verify_pat())
+            result = asyncio.run(rest.verify_credentials(organization))
             org_name = result.get("login", organization)
             print_ok(f"Credentials verified for organization: {org_name}")
-        except typer.Exit:
-            raise
         except Exception as exc:
             print_error(f"Credential verification failed: {exc}")
             print_error("Configuration was NOT saved.")
             raise typer.Exit(code=1)
+        finally:
+            asyncio.run(rest.close())
     else:
         # GitHub App: cannot verify without building JWT; defer to first discover
         print_info("GitHub App credentials saved. Run 'gh-audit discover' to verify.")
@@ -271,7 +294,6 @@ def discover(
     from gh_audit.services.discovery import DiscoveryService
     from gh_audit.services.excel_export import ExcelExportService
     from gh_audit.services.reporting import ReportService
-    from gh_audit.services.telemetry import Telemetry
 
     # 1. Configure logging
     _configure_logging(verbose=verbose, debug=debug, log_format=log_format)
@@ -305,25 +327,31 @@ def discover(
         raise typer.Exit(code=1)
 
     # 4. Initialize telemetry
-    telemetry = Telemetry(
+    telemetry = _start_command_telemetry(
+        command="discover",
         organization=settings.organization,
         enabled=not settings.telemetry_disabled,
-    )
-    telemetry.track_scanner_launched(
         auth_method=settings.auth_method,
         tool_version=__version__,
+        api_url=getattr(settings, "api_url", None),
+        scan_profile=getattr(settings, "scan_profile", None),
+        active_categories=list(getattr(settings, "categories", []) or []),
+        enterprise_slug=getattr(settings, "enterprise_slug", None),
     )
 
-    # 5. Determine output paths
-    if output is not None:
-        paths = OutputPaths.from_json_path(output)
-    elif output_dir is not None:
-        paths = OutputPaths.from_directory(output_dir, org=settings.organization)
-    else:
-        paths = OutputPaths.from_directory(Path("."), org=settings.organization)
-
-    # 6. Run discovery
+    # 5. Run discovery
+    telemetry.track_discovery_started()
     try:
+        import time as _time
+
+        if output is not None:
+            paths = OutputPaths.from_json_path(output)
+        elif output_dir is not None:
+            paths = OutputPaths.from_directory(output_dir, org=settings.organization)
+        else:
+            paths = OutputPaths.from_directory(Path("."), org=settings.organization)
+
+        _start = _time.monotonic()
         inventory = asyncio.run(
             _run_discover(
                 settings=settings,
@@ -334,57 +362,81 @@ def discover(
                 DiscoveryService=DiscoveryService,
             )
         )
+        _elapsed = _time.monotonic() - _start
+        # 6. Save inventory JSON
+        paths.json.parent.mkdir(parents=True, exist_ok=True)
+        paths.json.write_text(inventory.model_dump_json(indent=2), encoding="utf-8")
+        print_ok(f"Inventory saved to {paths.json}")
+        print_info(f"Discovered {inventory.summary.total_repos} repositories in {_elapsed:.1f}s")
+
+        # 7. Generate HTML report (non-blocking failure)
+        generate_html = report if report is not None else True
+        if generate_html:
+            try:
+                ReportService().generate(inventory, paths.report)
+                print_ok(f"Report saved to {paths.report}")
+            except Exception as exc:
+                telemetry.track_warning(
+                    "report_warning",
+                    error=exc,
+                    command="discover",
+                    operation="generate_html_report",
+                    warning_scope="report",
+                )
+                print_warn(f"HTML report generation failed: {exc}")
+
+        # 8. Generate Excel workbook (non-blocking failure)
+        generate_excel = excel if excel is not None else True
+        if generate_excel:
+            try:
+                ExcelExportService.generate(inventory, paths.excel)
+                print_ok(f"Excel workbook saved to {paths.excel}")
+            except Exception as exc:
+                telemetry.track_warning(
+                    "report_warning",
+                    error=exc,
+                    command="discover",
+                    operation="generate_excel_report",
+                    warning_scope="report",
+                )
+                print_warn(f"Excel export failed: {exc}")
+
+        # 9. Print summary
+        summary = inventory.summary
+        print()
+        print(f"Organization: {settings.organization}")
+        print(f"Repositories: {summary.total_repos}")
+        print(f"  Public:     {summary.public_repos}")
+        print(f"  Private:    {summary.private_repos}")
+        print(f"  Internal:   {summary.internal_repos}")
+        print(f"  Archived:   {summary.archived_repos}")
+        print(f"  Forked:     {summary.forked_repos}")
+        print()
+        print(f"Output: {paths.json}")
+        print()
+        print(CLI_BANNER)
+
+        telemetry.track_discovery_completed(
+            command="discover",
+            duration_seconds=_elapsed,
+            repo_count=inventory.summary.total_repos,
+            member_count=inventory.users.total,
+            package_count=len(inventory.packages),
+            workflow_count=inventory.summary.total_workflow_count,
+            issue_count=inventory.summary.total_issues,
+        )
     except ScannerError as exc:
         print_error(str(exc))
+        telemetry.track_discovery_failed(error=exc)
         telemetry.capture_exception(exc)
-        telemetry.shutdown()
         raise typer.Exit(code=exc.exit_code)
     except Exception as exc:
         print_error(f"Unexpected error: {exc}")
+        telemetry.track_discovery_failed(error=exc)
         telemetry.capture_exception(exc)
-        telemetry.shutdown()
         raise typer.Exit(code=1)
-
-    # 7. Save inventory JSON
-    paths.json.parent.mkdir(parents=True, exist_ok=True)
-    paths.json.write_text(inventory.model_dump_json(indent=2), encoding="utf-8")
-    print_ok(f"Inventory saved to {paths.json}")
-
-    # 8. Generate HTML report (non-blocking failure)
-    generate_html = report if report is not None else True
-    if generate_html:
-        try:
-            ReportService().generate(inventory, paths.report)
-            print_ok(f"Report saved to {paths.report}")
-        except Exception as exc:
-            print_warn(f"HTML report generation failed: {exc}")
-
-    # 9. Generate Excel workbook (non-blocking failure)
-    generate_excel = excel if excel is not None else True
-    if generate_excel:
-        try:
-            ExcelExportService.generate(inventory, paths.excel)
-            print_ok(f"Excel workbook saved to {paths.excel}")
-        except Exception as exc:
-            print_warn(f"Excel export failed: {exc}")
-
-    # 10. Print summary
-    summary = inventory.summary
-    print()
-    print(f"Organization: {settings.organization}")
-    print(f"Repositories: {summary.total_repos}")
-    print(f"  Public:     {summary.public_repos}")
-    print(f"  Private:    {summary.private_repos}")
-    print(f"  Internal:   {summary.internal_repos}")
-    print(f"  Archived:   {summary.archived_repos}")
-    print(f"  Forked:     {summary.forked_repos}")
-    print()
-    print(f"Output: {paths.json}")
-    print()
-    print(CLI_BANNER)
-
-    # 11. Shutdown telemetry
-    telemetry.shutdown()
+    finally:
+        telemetry.shutdown()
 
 
 def _discover_multi_org(
@@ -539,29 +591,13 @@ async def _run_discover(
         print_ok(f"Credentials verified ({settings.auth_method}, rate limit: {rate_display})")
 
         # Run discovery
-        telemetry.track_discovery_started()
-        import time as _time
-
-        _start = _time.monotonic()
         service = DiscoveryService(
             rest_client=rest,
             graphql_client=gql,
             config=settings,
+            telemetry=telemetry,
         )
         inventory = await service.discover()
-        _elapsed = _time.monotonic() - _start
-
-        # Print summary table
-        print_info(f"Discovered {inventory.summary.total_repos} repositories in {_elapsed:.1f}s")
-
-        telemetry.track_discovery_completed(
-            duration_seconds=_elapsed,
-            repo_count=inventory.summary.total_repos,
-            member_count=inventory.users.total,
-            package_count=len(inventory.packages),
-            workflow_count=inventory.summary.total_workflow_count,
-            issue_count=inventory.summary.total_issues,
-        )
 
         return inventory
 
@@ -597,43 +633,100 @@ def report(
 
     # Configure logging
     _configure_logging(verbose=verbose, debug=debug, log_format=log_format)
-
-    if not inventory_path.exists():
-        print_error(f"Inventory file not found: {inventory_path}")
-        raise typer.Exit(code=1)
-
-    # Load inventory
+    telemetry = None
+    inv = None
     try:
+        if not inventory_path.exists():
+            raise FileNotFoundError(str(inventory_path))
+
         raw = inventory_path.read_text(encoding="utf-8")
         inv = Inventory.model_validate_json(raw)
+        telemetry = _start_command_telemetry(
+            command="report",
+            organization=inv.metadata.organization,
+            enabled=True,
+            auth_method=inv.metadata.auth_method,
+            tool_version=inv.metadata.tool_version,
+            scan_profile=inv.metadata.scan_profile,
+            api_url=inv.metadata.api_url,
+            active_categories=list(inv.metadata.active_categories),
+            enterprise_slug=inv.metadata.enterprise_slug,
+        )
+
+        # Determine output paths
+        generate_html = html if html is not None else True
+        generate_excel = excel if excel is not None else True
+        telemetry.track_report_started(html=generate_html, excel=generate_excel, command="report")
+
+        if output_dir is not None:
+            paths = OutputPaths.from_directory(output_dir, org=inv.metadata.organization)
+        else:
+            paths = OutputPaths.from_json_path(inventory_path)
+
+        if generate_html:
+            try:
+                ReportService().generate(inv, paths.report)
+                print_ok(f"Report saved to {paths.report}")
+            except Exception as exc:
+                telemetry.track_warning(
+                    "report_warning",
+                    error=exc,
+                    command="report",
+                    operation="generate_html_report",
+                    warning_scope="report",
+                )
+                print_warn(f"HTML report generation failed: {exc}")
+
+        if generate_excel:
+            try:
+                ExcelExportService.generate(inv, paths.excel)
+                print_ok(f"Excel workbook saved to {paths.excel}")
+            except Exception as exc:
+                telemetry.track_warning(
+                    "report_warning",
+                    error=exc,
+                    command="report",
+                    operation="generate_excel_report",
+                    warning_scope="report",
+                )
+                print_warn(f"Excel export failed: {exc}")
+
+        telemetry.track_report_completed(
+            html=generate_html,
+            excel=generate_excel,
+            command="report",
+        )
+        print_ok("Report generation complete.")
     except Exception as exc:
-        print_error(f"Failed to load inventory: {exc}")
+        generate_html = html if html is not None else True
+        generate_excel = excel if excel is not None else True
+        if telemetry is None:
+            telemetry = _start_command_telemetry(
+                command="report",
+                organization="unknown",
+                enabled=True,
+                auth_method="unknown",
+                tool_version=__version__,
+            )
+            telemetry.track_report_started(
+                html=generate_html,
+                excel=generate_excel,
+                command="report",
+            )
+
+        if isinstance(exc, FileNotFoundError):
+            print_error(f"Inventory file not found: {inventory_path}")
+        elif inv is None:
+            print_error(f"Failed to load inventory: {exc}")
+        else:
+            print_error(f"Report generation failed: {exc}")
+
+        telemetry.track_report_failed(error=exc, command="report")
+        telemetry.capture_exception(exc)
         raise typer.Exit(code=1)
-
-    # Determine output paths
-    if output_dir is not None:
-        paths = OutputPaths.from_directory(output_dir, org=inv.metadata.organization)
-    else:
-        paths = OutputPaths.from_json_path(inventory_path)
-
-    generate_html = html if html is not None else True
-    generate_excel = excel if excel is not None else True
-
-    if generate_html:
-        try:
-            ReportService().generate(inv, paths.report)
-            print_ok(f"Report saved to {paths.report}")
-        except Exception as exc:
-            print_warn(f"HTML report generation failed: {exc}")
-
-    if generate_excel:
-        try:
-            ExcelExportService.generate(inv, paths.excel)
-            print_ok(f"Excel workbook saved to {paths.excel}")
-        except Exception as exc:
-            print_warn(f"Excel export failed: {exc}")
-
-    print_ok("Report generation complete.")
+    finally:
+        if telemetry is not None:
+            telemetry.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -666,49 +759,85 @@ def assess(
     from gh_audit.services.assessment import AssessmentService
 
     _configure_logging(verbose=verbose, debug=debug, log_format=log_format)
-
-    if not input_path.exists():
-        print_error(f"Inventory file not found: {input_path}")
-        raise typer.Exit(code=1)
-
+    telemetry = None
+    inventory = None
     try:
+        if not input_path.exists():
+            raise FileNotFoundError(str(input_path))
+
         raw = input_path.read_text(encoding="utf-8")
         inventory = Inventory.model_validate_json(raw)
-    except Exception as exc:
-        print_error(f"Failed to load inventory: {exc}")
-        raise typer.Exit(code=1)
+        telemetry = _start_command_telemetry(
+            command="assess",
+            organization=inventory.metadata.organization,
+            enabled=True,
+            auth_method=inventory.metadata.auth_method,
+            tool_version=inventory.metadata.tool_version,
+            scan_profile=inventory.metadata.scan_profile,
+            api_url=inventory.metadata.api_url,
+            active_categories=list(inventory.metadata.active_categories),
+            enterprise_slug=inventory.metadata.enterprise_slug,
+        )
+        telemetry.track_assess_started()
 
-    # Warn on schema version mismatch
-    from gh_audit.services.discovery import _SCHEMA_VERSION
+        # Warn on schema version mismatch
+        from gh_audit.services.discovery import _SCHEMA_VERSION
 
-    if inventory.metadata.schema_version != _SCHEMA_VERSION:
-        print_warn(
-            f"Inventory schema version {inventory.metadata.schema_version!r} "
-            f"differs from expected {_SCHEMA_VERSION!r}. "
-            f"Assessment results may be incomplete."
+        if inventory.metadata.schema_version != _SCHEMA_VERSION:
+            print_warn(
+                f"Inventory schema version {inventory.metadata.schema_version!r} "
+                f"differs from expected {_SCHEMA_VERSION!r}. "
+                f"Assessment results may be incomplete."
+            )
+
+        engine = RuleEngine.default()
+        findings = engine.run(inventory)
+
+        result = AssessmentResult(
+            organization=inventory.metadata.organization,
+            generated_at=datetime.now(timezone.utc),
+            inventory_generated_at=inventory.metadata.generated_at,
+            scan_profile=inventory.metadata.scan_profile,
+            active_categories=inventory.metadata.active_categories,
+            findings=findings,
         )
 
-    engine = RuleEngine.default()
-    findings = engine.run(inventory)
-
-    result = AssessmentResult(
-        organization=inventory.metadata.organization,
-        generated_at=datetime.now(timezone.utc),
-        inventory_generated_at=inventory.metadata.generated_at,
-        scan_profile=inventory.metadata.scan_profile,
-        active_categories=inventory.metadata.active_categories,
-        findings=findings,
-    )
-
-    try:
         AssessmentService().generate(result, output_path)
+        critical = sum(1 for f in findings if f.severity.value == "critical")
+        warning = sum(1 for f in findings if f.severity.value == "warning")
+        info = sum(1 for f in findings if f.severity.value == "info")
+        telemetry.track_assess_completed(
+            command="assess",
+            finding_count=len(findings),
+            critical_count=critical,
+            warning_count=warning,
+            info_count=info,
+        )
     except Exception as exc:
-        print_error(f"Assessment report generation failed: {exc}")
-        raise typer.Exit(code=1)
+        if telemetry is None:
+            telemetry = _start_command_telemetry(
+                command="assess",
+                organization="unknown",
+                enabled=True,
+                auth_method="unknown",
+                tool_version=__version__,
+            )
+            telemetry.track_assess_started()
 
-    critical = sum(1 for f in findings if f.severity.value == "critical")
-    warning = sum(1 for f in findings if f.severity.value == "warning")
-    info = sum(1 for f in findings if f.severity.value == "info")
+        if isinstance(exc, FileNotFoundError):
+            print_error(f"Inventory file not found: {input_path}")
+        elif inventory is None:
+            print_error(f"Failed to load inventory: {exc}")
+        else:
+            print_error(f"Assessment report generation failed: {exc}")
+
+        telemetry.track_assess_failed(error=exc, command="assess")
+        telemetry.capture_exception(exc)
+        raise typer.Exit(code=1)
+    finally:
+        if telemetry is not None:
+            telemetry.shutdown()
+
     print_ok(f"Assessment complete: {critical} critical, {warning} warning, {info} info findings")
     print_ok(f"Report saved to {output_path}")
 

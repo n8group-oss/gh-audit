@@ -4,6 +4,12 @@ All notable changes to `gh-audit` will be documented in this file.
 
 The public release history starts here.
 
+## v0.2.1 (2026-04-02)
+
+### Fix
+
+- address Chocolatey validation requirements and guidelines (#6)
+
 ## v0.2.0 (2026-04-01)
 
 ### Feat
